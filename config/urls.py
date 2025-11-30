@@ -17,9 +17,11 @@ Including another URLconf
 # config/urls.py
 from django.contrib import admin
 from django.urls import path
+from django.views.generic import RedirectView
 from core.views import invoice_pdf
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('invoice/<int:booking_id>/', invoice_pdf, name='invoice_pdf'),
+    path('', RedirectView.as_view(url='/admin/', permanent=False)),
 ]

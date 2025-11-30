@@ -3,3 +3,5 @@ psycopg[binary]
 dj-database-url
 weasyprint==63.0
 django-admin-rangefilter
+django-unfold
+django-simple-history

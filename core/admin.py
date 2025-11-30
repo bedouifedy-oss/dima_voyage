@@ -2,31 +2,62 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
-from django.db.models import Sum
+from django.db import models 
+from django.db.models import Sum, F, Value
+from django.db.models.functions import Coalesce
 from rangefilter.filters import DateRangeFilterBuilder
-from .models import Client, Supplier, Booking, Payment, Expense, LedgerEntry
+from unfold.admin import ModelAdmin 
+
+from .models import Client, Supplier, Booking, Payment, Expense, LedgerEntry, KnowledgeBase, Announcement, User
+
+# --- CUSTOM FILTERS ---
+
+class OutstandingFilter(admin.SimpleListFilter):
+    title = 'Outstanding Balance'
+    parameter_name = 'outstanding_status'
+
+    def lookups(self, request, model_admin):
+        return (
+            ('yes', 'Has Outstanding Balance'),
+            ('no', 'Fully Paid'),
+        )
+
+    def queryset(self, request, queryset):
+        qs = queryset.annotate(
+            db_paid=Coalesce(
+                Sum('payments__amount'), 
+                Value(0), 
+                output_field=models.DecimalField()
+            )
+        )
+        
+        if self.value() == 'yes':
+            return qs.filter(total_amount__gt=F('db_paid'))
+        
+        if self.value() == 'no':
+            return qs.filter(total_amount__lte=F('db_paid'))
+        
+        return queryset
+
+# --- OPERATIONS ADMIN ---
 
 @admin.register(Client)
-class ClientAdmin(admin.ModelAdmin):
+class ClientAdmin(ModelAdmin):
     list_display = ('name', 'phone', 'passport', 'created_at')
     search_fields = ('name', 'phone', 'passport')
 
 @admin.register(Supplier)
-class SupplierAdmin(admin.ModelAdmin):
+class SupplierAdmin(ModelAdmin):
     list_display = ('name', 'contact')
 
 @admin.register(Booking)
-class BookingAdmin(admin.ModelAdmin):
-    # 1. Added 'invoice_link' to the list display
+class BookingAdmin(ModelAdmin):
+    autocomplete_fields = ['client']
     list_display = ('ref', 'client', 'booking_type', 'total_amount', 'paid_amount', 'outstanding', 'status', 'invoice_link')
-    
-    list_filter = ('status', 'booking_type', 'created_at')
+    list_filter = (OutstandingFilter, 'status', 'booking_type', 'created_at')
     search_fields = ('ref', 'client__name')
-    
-    # 2. Added 'invoice_link' to read-only fields so it appears inside the form too
     readonly_fields = ('ref', 'created_at', 'invoice_link')
 
-    # 3. The logic to generate the PDF button
     def invoice_link(self, obj):
         if obj.pk:
             url = reverse('invoice_pdf', args=[obj.pk])
@@ -34,33 +65,31 @@ class BookingAdmin(admin.ModelAdmin):
         return "-"
     invoice_link.short_description = "Invoice"
 
+# --- FINANCE ADMIN ---
+
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(ModelAdmin):
     list_display = ('date', 'amount', 'method', 'booking', 'reference')
     list_filter = ('method', 'date')
     search_fields = ('booking__ref', 'reference')
 
 @admin.register(Expense)
-class ExpenseAdmin(admin.ModelAdmin):
+class ExpenseAdmin(ModelAdmin):
     list_display = ('name', 'amount', 'due_date', 'paid', 'supplier')
     list_filter = ('paid', 'due_date')
 
 @admin.register(LedgerEntry)
-class LedgerEntryAdmin(admin.ModelAdmin):
-    # Point to the custom template for the dashboard
+class LedgerEntryAdmin(ModelAdmin):
     change_list_template = 'admin/core/ledgerentry/change_list.html'
     
     list_display = ('date', 'formatted_account', 'formatted_debit', 'formatted_credit', 'booking')
     
-    # Enables Start/End picker
     list_filter = (
         ("date", DateRangeFilterBuilder()), 
         "account"
     )
+    date_hierarchy = 'date' 
     
-    date_hierarchy = 'date' # Adds the breadcrumb date nav
-    
-    # --- VISUAL FORMATTING ---
     def formatted_account(self, obj):
         if obj.account.startswith('Revenue'):
             return format_html('<span style="color: green; font-weight:bold;">{}</span>', obj.account)
@@ -81,33 +110,87 @@ class LedgerEntryAdmin(admin.ModelAdmin):
         return "-"
     formatted_credit.short_description = "Credit"
 
-    # --- DASHBOARD CALCULATION LOGIC ---
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
-
-        # Ensure we are looking at the list view (not an error or redirect)
         if hasattr(response, 'context_data') and 'cl' in response.context_data:
             qs = response.context_data['cl'].queryset
-
-            # 1. Calculate Revenue (Sum of Credits in Revenue accounts)
             revenue = qs.filter(account__startswith='Revenue').aggregate(total=Sum('credit'))['total'] or 0
-            
-            # 2. Calculate Expenses (Sum of Debits in Expense accounts)
-            # Note: We include both 'Expense:' (Supplier Cost) and regular operational expenses
             expense = qs.filter(account__startswith='Expense').aggregate(total=Sum('debit'))['total'] or 0
-
-            # 3. Calculate Net Profit
             profit = revenue - expense
-
-            # Send data to the template
             response.context_data['summary'] = {
                 'revenue': revenue,
                 'expense': expense,
                 'profit': profit
             }
-        
         return response
     
-    # CRITICAL: Prevent manual deletion of ledger entries for audit safety
     def has_delete_permission(self, request, obj=None):
         return False
+
+# --- SUPPORT ADMIN ---
+
+@admin.register(KnowledgeBase)
+class KnowledgeBaseAdmin(ModelAdmin):
+    list_display = ('title', 'category', 'utility_score', 'updated_at', 'author')
+    list_filter = ('category', 'utility_score')
+    search_fields = ('title', 'procedure', 'tags', 'summary')
+    readonly_fields = ('created_at', 'updated_at')
+    
+    fieldsets = (
+        ('Identification', {
+            'fields': ('title', 'category', 'tags')
+        }),
+        ('Contenu Opérationnel', {
+            'fields': ('summary', 'objective', 'prerequisites', 'procedure', 'example')
+        }),
+        ('Support', {
+            'fields': ('escalation_contact', 'utility_score', 'author', 'created_at', 'updated_at')
+        }),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not obj.author:
+            obj.author = request.user
+        super().save_model(request, obj, form, change)
+
+# --- NEW: ANNOUNCEMENT ADMIN ---
+@admin.register(Announcement)
+class AnnouncementAdmin(ModelAdmin):
+    list_display = ('title', 'priority', 'created_at', 'approval_progress', 'user_status')
+    list_filter = ('priority', 'created_at')
+    search_fields = ('title', 'content')
+    readonly_fields = ('created_at', 'created_by', 'acknowledged_by')
+    
+    # The action button to mark as read
+    actions = ['mark_as_read']
+
+    def mark_as_read(self, request, queryset):
+        for announcement in queryset:
+            announcement.acknowledged_by.add(request.user)
+        self.message_user(request, "✅ You have successfully acknowledged the selected updates.")
+    mark_as_read.short_description = "✅ SIGN / APPROVE Selected Updates"
+
+    # Progress bar for you (Manager)
+    def approval_progress(self, obj):
+        count = obj.acknowledged_by.count()
+        total_staff = User.objects.filter(is_active=True).count()
+        if total_staff == 0: return "0%"
+        
+        percent = int((count / total_staff) * 100)
+        color = "green" if percent == 100 else "orange"
+        
+        return format_html(
+            f'<div style="width:100px; background:#eee; border-radius:4px; overflow:hidden;">'
+            f'<div style="width:{percent}%; background:{color}; height:10px;"></div>'
+            f'</div><span style="font-size:10px;">{count}/{total_staff} Staff</span>'
+        )
+    approval_progress.short_description = "Approval Status"
+
+    # Simple status for the logged-in user
+    def user_status(self, obj):
+        return f"{obj.approval_count} Approvals" 
+    
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)

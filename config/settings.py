@@ -1,4 +1,3 @@
-
 """
 Django settings for config project.
 
@@ -14,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import dj_database_url
 import os
 from pathlib import Path
+from django.urls import reverse_lazy
+from django.templatetags.static import static # <--- CRITICAL IMPORT FOR LOGO
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -34,6 +35,9 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    "unfold",                  # <--- NEW: Must be at the top
+    "unfold.contrib.filters",  # <--- NEW: Optional, for better filters
+    'simple_history',  # <--- NEW: for better activity logging
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -53,6 +57,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'simple_history.middleware.HistoryRequestMiddleware', # <--- NEW: Tracks the user
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -122,7 +127,91 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Register the assets folder so Django finds your logo.png
+STATICFILES_DIRS = [
+    BASE_DIR / "assets",
+]
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- UNFOLD CONFIGURATION ---
+UNFOLD = {
+    "SITE_TITLE": "Dima Voyage",
+    "SITE_HEADER": "Dima Admin", 
+    "SITE_URL": "/",
+    
+    # Use SITE_ICON to place the image beside the text
+    "SITE_ICON": lambda request: static("dima_voyages.png"),
+
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": [
+            {
+                "title": "Operations",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Bookings",
+                        "icon": "airplane_ticket",
+                        "link": reverse_lazy("admin:core_booking_changelist"),
+                    },
+                    {
+                        "title": "Clients",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:core_client_changelist"),
+                    },
+                    {
+                        "title": "Suppliers",
+                        "icon": "store",
+                        "link": reverse_lazy("admin:core_supplier_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Finance",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Payments",
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:core_payment_changelist"),
+                    },
+                    {
+                        "title": "Ledger (Cash Flow)",
+                        "icon": "account_balance",
+                        "link": reverse_lazy("admin:core_ledgerentry_changelist"),
+                    },
+                    {
+                        "title": "Expenses",
+                        "icon": "receipt_long",
+                        "link": reverse_lazy("admin:core_expense_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Support & Updates", # <--- Updated Section Title
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Announcements",
+                        "icon": "campaign",
+                        "link": reverse_lazy("admin:core_announcement_changelist"),
+                        
+                        # 🔥 The Notification Badge
+                        # It calls the function badge_callback() in core/utils.py
+                        "badge": "core.utils.badge_callback", 
+                    },
+                    {
+                        "title": "Knowledge Base",
+                        "icon": "menu_book",
+                        "link": reverse_lazy("admin:core_knowledgebase_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
