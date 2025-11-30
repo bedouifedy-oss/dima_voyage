@@ -30,13 +30,10 @@ class OutstandingFilter(admin.SimpleListFilter):
                 output_field=models.DecimalField()
             )
         )
-        
         if self.value() == 'yes':
             return qs.filter(total_amount__gt=F('db_paid'))
-        
         if self.value() == 'no':
             return qs.filter(total_amount__lte=F('db_paid'))
-        
         return queryset
 
 # --- OPERATIONS ADMIN ---
@@ -64,6 +61,17 @@ class BookingAdmin(ModelAdmin):
             return format_html('<a class="button" href="{}" target="_blank">🖨️ Print Invoice</a>', url)
         return "-"
     invoice_link.short_description = "Invoice"
+    
+    # 🔧 FIXED: Libraries for Amadeus Search
+    class Media:
+        css = {
+            'all': ('https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/themes/smoothness/jquery-ui.min.css',)
+        }
+        js = (
+            'https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js',       # Reliable jQuery
+            'https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js', # Reliable UI Library
+            'js/airport_search.js',                                                     # Your script
+        )
 
 # --- FINANCE ADMIN ---
 
@@ -161,7 +169,6 @@ class AnnouncementAdmin(ModelAdmin):
     search_fields = ('title', 'content')
     readonly_fields = ('created_at', 'created_by', 'acknowledged_by')
     
-    # The action button to mark as read
     actions = ['mark_as_read']
 
     def mark_as_read(self, request, queryset):
@@ -170,7 +177,6 @@ class AnnouncementAdmin(ModelAdmin):
         self.message_user(request, "✅ You have successfully acknowledged the selected updates.")
     mark_as_read.short_description = "✅ SIGN / APPROVE Selected Updates"
 
-    # Progress bar for you (Manager)
     def approval_progress(self, obj):
         count = obj.acknowledged_by.count()
         total_staff = User.objects.filter(is_active=True).count()
@@ -186,7 +192,6 @@ class AnnouncementAdmin(ModelAdmin):
         )
     approval_progress.short_description = "Approval Status"
 
-    # Simple status for the logged-in user
     def user_status(self, obj):
         return f"{obj.approval_count} Approvals" 
     

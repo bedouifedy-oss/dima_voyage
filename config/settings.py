@@ -130,7 +130,10 @@ STATIC_URL = 'static/'
 # Register the assets folder so Django finds your logo.png
 STATICFILES_DIRS = [
     BASE_DIR / "assets",
+    BASE_DIR / "core" / "static",
 ]
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
