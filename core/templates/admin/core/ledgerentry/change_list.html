@@ -1,0 +1,71 @@
+{% extends "admin/change_list.html" %}
+{% load humanize %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* 🖨️ PRINT STYLES: These only run when you press Print */
+    @media print {
+        /* Hide the Django Admin Sidebar, Header, Breadcrumbs, and Action buttons */
+        #header, .breadcrumbs, .action-checkbox-column, .object-tools, #changelist-filter, .paginator {
+            display: none !important;
+        }
+        /* Hide the custom Print button itself */
+        #print-btn { display: none !important; }
+
+        /* Make the content full width */
+        #content { margin: 0 !important; padding: 0 !important; width: 100% !important; }
+        #changelist { width: 100% !important; }
+        
+        /* Typography for printing */
+        body { font-family: "Times New Roman", serif; font-size: 12pt; background: white; }
+        h2 { color: black !important; }
+        
+        /* Clean up the table */
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc !important; padding: 8px !important; }
+        
+        /* Ensure colors print (browsers sometimes hide background colors) */
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+{% endblock %}
+
+{% block result_list %}
+<div style="background: #fff; padding: 20px; margin-bottom: 20px; border-left: 5px solid #447e9b; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="margin-top: 0; color: #333; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">
+            Financial Summary (Based on current filters)
+        </h2>
+        
+        <button id="print-btn" onclick="window.print()" style="background: #447e9b; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
+            🖨️ Print Report
+        </button>
+    </div>
+    
+    <div style="display: flex; gap: 40px; margin-top: 15px;">
+        <div>
+            <span style="display: block; font-size: 12px; color: #666;">TOTAL REVENUE</span>
+            <span style="font-size: 24px; font-weight: bold; color: #28a745;">
+                {{ summary.revenue|intcomma }} TND
+            </span>
+        </div>
+
+        <div>
+            <span style="display: block; font-size: 12px; color: #666;">SUPPLIER COST / EXPENSES</span>
+            <span style="font-size: 24px; font-weight: bold; color: #dc3545;">
+                {{ summary.expense|intcomma }} TND
+            </span>
+        </div>
+
+        <div style="padding-left: 40px; border-left: 1px solid #eee;">
+            <span style="display: block; font-size: 12px; color: #666;">NET PROFIT</span>
+            <span style="font-size: 24px; font-weight: bold; color: {% if summary.profit >= 0 %}#333{% else %}#dc3545{% endif %};">
+                {{ summary.profit|intcomma }} TND
+            </span>
+        </div>
+    </div>
+</div>
+{{ block.super }}
+{% endblock %}

@@ -1,0 +1,47 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dima
+      POSTGRES_PASSWORD: change_this_securely # ⚠️ MUST change for production
+      POSTGRES_DB: dima_finance
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Exposes DB port locally (optional)
+
+  web:
+    build: .
+    command: >
+      bash -c "python manage.py makemigrations core
+      && python manage.py migrate 
+      && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      # Connection string for Django to access the 'db' service
+      DATABASE_URL: postgres://dima:change_this_securely@db:5432/dima_finance
+      
+  metabase:
+    image: metabase/metabase:latest
+    ports:
+      - "3000:3000"
+    environment:
+      # Metabase uses its own internal DB (postgres)
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: metabase_user
+      MB_DB_PASS: metabase_password
+      MB_DB_HOST: db         # NOTE: You would typically run a separate DB for metabase's metadata. 
+                             # For simplicity, we'll keep the Metabase config as is, 
+                             # but you will configure it later to connect to the 'db' service as a data source.
+    depends_on:
+      - db
+
+volumes:
+  db_data: # Persist Postgres data

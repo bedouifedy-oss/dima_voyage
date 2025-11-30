@@ -1,0 +1,5 @@
+Django==5.2.8
+psycopg[binary]
+dj-database-url
+weasyprint==63.0
+django-admin-rangefilter
