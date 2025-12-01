@@ -49,14 +49,56 @@ class VisaInline(admin.StackedInline):
 @admin.register(Booking)
 class BookingAdmin(ModelAdmin):
     autocomplete_fields = ['client']
-    list_display = ('ref', 'client', 'booking_type', 'total_amount', 'paid_amount', 'outstanding', 'status', 'invoice_link')
-    list_filter = (OutstandingFilter, 'status', 'booking_type', 'created_at')
+    
+    # 1. UPDATED list_display: Reflects transaction-based fields
+    list_display = (
+        'ref', 
+        'operation_type', 
+        'payment_status', 
+        'client', 
+        'booking_type', 
+        'total_amount', 
+        'supplier_cost', 
+        'outstanding', 
+        'invoice_link'
+    )
+    
+    # 2. UPDATED list_filter: Filter by Action (Issue/Refund) and Status (Paid/Advance)
+    list_filter = (
+        OutstandingFilter, 
+        'operation_type',       # NEW FILTER
+        'payment_status',       # NEW FILTER
+        'booking_type', 
+        'created_at'
+    )
+    
     search_fields = ('ref', 'client__name')
     readonly_fields = ('ref', 'created_at', 'invoice_link')
     
-    inlines = [VisaInline] # <--- Added Inline
-    actions = ['send_whatsapp_tn', 'send_whatsapp_fr'] # <--- Added Actions
+    # 3. FIELDSETS: Organizes the complex financial inputs
+    fieldsets = (
+        ('1. Operation & Service', {
+            'fields': ('operation_type', 'parent_booking', 'booking_type', 'client', 'description')
+        }),
+        ('2. Primary Financials (Issue / Change)', {
+            'fields': ('total_amount', 'supplier_cost', 'payment_status'),
+            'description': "Fill for NEW SALES or AMENDMENT FEES. 'Total Amount' is the client's new balance."
+        }),
+        ('3. Refunds (Only for Refund Action)', {
+            'fields': ('refund_amount_client', 'refund_amount_supplier'),
+            'description': "Use ONLY if Action is REFUND. Ledger will post reversals based on these amounts.",
+            'classes': ('collapse',) # Hide this section by default
+        }),
+        ('4. System Details', {
+            'fields': ('ref', 'created_by', 'created_at', 'is_ledger_posted'),
+            'classes': ('collapse',)
+        })
+    )
 
+    inlines = [VisaInline] # <--- Visa Inline is correctly added
+    actions = ['send_whatsapp_tn', 'send_whatsapp_fr'] # WhatsApp Actions are defined
+
+    # --- ACTION LOGIC (Keep as is) ---
     def invoice_link(self, obj):
         if obj.pk:
             url = reverse('invoice_pdf', args=[obj.pk])
@@ -72,7 +114,7 @@ class BookingAdmin(ModelAdmin):
             'js/airport_search.js',
         )
 
-    # --- WHATSAPP ACTIONS ---
+    # --- WHATSAPP ACTIONS (Keep as is) ---
     def send_whatsapp_tn(self, request, queryset):
         self._send_whatsapp_logic(request, queryset, lang='tn')
     send_whatsapp_tn.short_description = "🇹🇳 Send Visa Form (Tunisian)"
@@ -104,9 +146,6 @@ class BookingAdmin(ModelAdmin):
         
         lang_name = "French" if lang == 'fr' else "Tunisian"
         self.message_user(request, f"✅ Sent {lang_name} form to {count} clients.")
-
-# --- FINANCE ADMIN ---
-
 @admin.register(Payment)
 class PaymentAdmin(ModelAdmin):
     list_display = ('date', 'amount', 'method', 'booking', 'reference')
