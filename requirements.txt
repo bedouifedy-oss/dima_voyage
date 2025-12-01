@@ -6,3 +6,4 @@ django-admin-rangefilter
 django-unfold
 django-simple-history
 amadeus>=9.0.0
+requests

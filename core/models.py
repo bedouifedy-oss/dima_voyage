@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from decimal import Decimal
 from simple_history.models import HistoricalRecords
+from .constants import BOOKING_TYPES, OPERATION_TYPES, PAYMENT_STATUSES  # NEW IMPORT
 
 User = get_user_model()
 
@@ -23,54 +24,32 @@ class Supplier(models.Model):
 
 # --- THE CORE TRANSACTION MODEL ---
 class Booking(models.Model):
-    # 1. Service Types
-    BOOKING_TYPES = [
-        ('ticket', '✈️ Air Ticket'),
-        ('hotel_out', '🏨 Outgoing Hotel'),
-        ('hotel_loc', '🇹🇳 Local Hotel'),
-        ('umrah', '🕋 Umrah Package'),
-        ('trip', '🚌 Organized Trip'),
-        ('visa_app','Visa Application'),
-        ('transfer', '🚖 Transfer'),
-        ('dummy', '📄 Dummy Booking'),
-    ]
-    
-    # 2. Operations (The "Verb")
-    OPERATION_TYPES = [
-        ('issue', 'Issue / New Sale'),
-        ('change', 'Change / Modification'),
-        ('refund', 'Refund / Cancellation'),
-    ]
-
-    # 3. Financial Status (The "State")
-    PAYMENT_STATUSES = [
-        ('pending', 'Pending Payment'),
-        ('advance', 'Partial / Advance'),
-        ('paid', 'Fully Paid'),
-        ('refunded', 'Refunded'),
-        ('cancelled', 'Cancelled (Void)'), 
-    ]
-
+    # 1. Classification & Status
     ref = models.CharField(max_length=30, unique=True, blank=True)
     client = models.ForeignKey(Client, on_delete=models.PROTECT)
-    parent_booking = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='amendments', help_text="Link to original booking for Change/Refund")
+    parent_booking = models.ForeignKey(
+        'self', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='amendments', 
+        help_text="Link to original booking for Change/Refund"
+    )
 
+    # Choices are now imported from .constants
     booking_type = models.CharField("Service Type", max_length=40, choices=BOOKING_TYPES)
     operation_type = models.CharField("Action", max_length=20, choices=OPERATION_TYPES, default='issue')
     payment_status = models.CharField("Payment Status", max_length=20, choices=PAYMENT_STATUSES, default='pending')
     
     description = models.TextField(blank=True)
     
-    # --- Financials ---
-    # For Issue/Change
+    # 2. Financials
     total_amount = models.DecimalField("Sale Price / Fee", max_digits=12, decimal_places=2, default=Decimal('0.00')) 
     supplier_cost = models.DecimalField("Supplier Cost", max_digits=12, decimal_places=2, default=Decimal('0.00')) 
-    
-    # For Refund Only
-    refund_amount_client = models.DecimalField("Refund TO Client", max_digits=12, decimal_places=2, default=Decimal('0.00'))
-    refund_amount_supplier = models.DecimalField("Refund FROM Supplier", max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    refund_amount_client = models.DecimalField("Refund TO Client", max_digits=12, decimal_places=2, default=Decimal('0.00'), help_text="Amount we give back to client")
+    refund_amount_supplier = models.DecimalField("Refund FROM Supplier", max_digits=12, decimal_places=2, default=Decimal('0.00'), help_text="Amount received back from supplier")
 
-    # Logic Flag
+    # Flag: Replaces is_supplier_paid
     is_ledger_posted = models.BooleanField(default=False, help_text="System Flag: Ledger entries created")
     
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='booked_by')
@@ -94,7 +73,8 @@ class Booking(models.Model):
         super().save(*args, **kwargs)
 
     @property
-    def paid_amount(self): return self.payments.aggregate(total=models.Sum('amount'))['total'] or Decimal('0.00')
+    def paid_amount(self): 
+        return self.payments.aggregate(total=models.Sum('amount'))['total'] or Decimal('0.00')
     
     @property
     def outstanding(self):
@@ -204,10 +184,10 @@ class FlightTicket(models.Model):
     live_status = models.CharField(max_length=50, default="Unknown")
     last_checked = models.DateTimeField(null=True, blank=True)
     
-    # Simple regex parsing logic (Simplified here, paste your full logic if needed)
+    # Simple regex parsing logic
     def save(self, *args, **kwargs): super().save(*args, **kwargs)
     @property
-    def status_color(self): return "gray" # Simplified
+    def status_color(self): return "gray"
     def __str__(self): return f"Ticket: {self.booking.ref}"
 
 # --- VISA APPLICATION MODEL ---
