@@ -9,12 +9,13 @@ from django.db import models  # <--- Essential for the Filter to work
 from django.db.models import Sum, F, Value
 from django.db.models.functions import Coalesce
 from rangefilter.filters import DateRangeFilterBuilder
+# --- FIX: Explicitly import Unfold's ModelAdmin ---
 from unfold.admin import ModelAdmin
 
 from .models import (
     Client, Supplier, Booking, Payment, Expense, LedgerEntry,
     KnowledgeBase, Announcement, User, VisaApplication, WhatsAppSettings,
-    AmadeusSettings
+    AmadeusSettings, FlightTicket
 )
 from .forms import BookingAdminForm
 
@@ -64,9 +65,17 @@ class VisaInline(admin.StackedInline):
     readonly_fields = ('submitted_at',)
     extra = 0
 
+# --- FIX: Defined BEFORE BookingAdmin and NOT decorated ---
+class FlightTicketInline(admin.StackedInline):
+    model = FlightTicket
+    extra = 1
+    max_num = 1
+    verbose_name = "✈️ Flight Ticket Details"
+    classes = ('collapse',)
+
 # --- 3. MAIN BOOKING ADMIN ---
 
-@admin.register(Booking)
+@admin.register(Booking) # <--- Correctly placed above BookingAdmin
 class BookingAdmin(ModelAdmin):
     form = BookingAdminForm
     autocomplete_fields = ['client']
@@ -96,7 +105,7 @@ class BookingAdmin(ModelAdmin):
             'fields': (
                 ('ref', 'created_at'), 
                 'client', 
-                'booking_type', # <--- FIXED: Removed 'trip_date' from here
+                'booking_type', 
                 'description'
             )
         }),
@@ -115,7 +124,7 @@ class BookingAdmin(ModelAdmin):
         }),
     )
 
-    inlines = [VisaInline, PaymentHistoryInline]
+    inlines = [VisaInline, FlightTicketInline, PaymentHistoryInline]
 
     def save_model(self, request, obj, form, change):
         # A. Auto-Generate Reference
@@ -214,30 +223,17 @@ class LedgerEntryAdmin(ModelAdmin):
     def formatted_credit(self, obj): return format_html('<span style="color: #008800;">{}</span>', obj.credit) if obj.credit > 0 else "-"
     formatted_credit.short_description = "Credit"
     
-    # --- THIS WAS MISSING: It calculates the totals ---
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
-        
-        # Check if we have data to summarize
         if hasattr(response, 'context_data') and 'cl' in response.context_data:
             qs = response.context_data['cl'].queryset
-            
-            # 1. Calculate Total Revenue (Credits to Revenue accounts)
             revenue = qs.filter(account__startswith='Revenue').aggregate(total=Sum('credit'))['total'] or 0
-            
-            # 2. Calculate Total Expenses (Debits to Expense accounts)
             expense = qs.filter(account__startswith='Expense').aggregate(total=Sum('debit'))['total'] or 0
-            
-            # 3. Inject into template
-            response.context_data['summary'] = {
-                'revenue': revenue, 
-                'expense': expense, 
-                'profit': revenue - expense
-            }
-            
+            response.context_data['summary'] = {'revenue': revenue, 'expense': expense, 'profit': revenue - expense}
         return response
     
     def has_delete_permission(self, request, obj=None): return False
+
 @admin.register(Announcement)
 class AnnouncementAdmin(ModelAdmin):
     list_display = ('title', 'priority', 'created_at', 'approval_progress', 'user_status')

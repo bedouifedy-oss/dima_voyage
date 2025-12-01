@@ -1,87 +1,115 @@
 # core/signals.py
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.db import transaction
-from .models import Payment, LedgerEntry, Expense, Booking, User
+from .models import Payment, LedgerEntry, Booking
 from decimal import Decimal
 
-# Helper function for creating immutable Ledger Entries
-def create_ledger(date, account, debit, credit, booking, user=None):
-    LedgerEntry.objects.create(
-        date=date, 
-        account=account, 
-        debit=debit, 
-        credit=credit, 
-        booking=booking, 
-        created_by=user
-    )
-
-@receiver(post_save, sender=Payment)
-def payment_post_save(sender, instance, created, **kwargs):
-    """
-    TRACKS CASH MOVEMENT (Assets/Liabilities).
-    This function drives the Payment Status (Pending -> Advance -> Paid/Refunded).
-    """
-    if created and instance.booking:
-        with transaction.atomic():
-            b = instance.booking
-            amount = instance.amount
-            
-            # --- 1. REFUND PAYMENT (Money Out) ---
-            if b.operation_type == 'refund':
-                # Debit Revenue:Refunds (Reduces Sale) | Credit Assets:Cash (Cash Out to Client)
-                create_ledger(instance.date, "Revenue:Refunds", amount, 0, b, instance.created_by)
-                create_ledger(instance.date, f"Assets:{instance.get_method_display()}", 0, amount, b, instance.created_by)
-                
-                # Set refund status
-                b.payment_status = 'refunded'
-                b.save(update_fields=['payment_status'])
-                
-            # --- 2. STANDARD PAYMENT (Money In) ---
-            else:
-                # Debit Assets:Cash (Cash In) | Credit Revenue:Sales (Increase Sales)
-                create_ledger(instance.date, f"Assets:{instance.get_method_display()}", amount, 0, b, instance.created_by)
-                create_ledger(instance.date, "Revenue:Sales", 0, amount, b, instance.created_by)
-                
-                # Update Booking Status based on outstanding balance
-                if b.outstanding <= Decimal('0.00'):
-                    b.payment_status = 'paid'
-                else:
-                    b.payment_status = 'advance'
-                b.save(update_fields=['payment_status'])
+# Helper to track previous state
+@receiver(pre_save, sender=Booking)
+def cache_previous_financials(sender, instance, **kwargs):
+    if instance.pk:
+        try:
+            old_instance = Booking.objects.get(pk=instance.pk)
+            instance._old_total_amount = old_instance.total_amount
+            instance._old_supplier_cost = old_instance.supplier_cost
+        except Booking.DoesNotExist:
+            pass
 
 @receiver(post_save, sender=Booking)
-def booking_post_save(sender, instance, created, **kwargs):
+def update_ledger_on_booking(sender, instance, created, **kwargs):
     """
-    TRACKS SUPPLIER LIABILITIES (Accrual/Cost Booking).
-    This function handles the Cost of Goods Sold (COGS) entry.
+    ACCRUAL BASIS: Record Revenue/Expense.
+    Handles DELTA logic (Changes) to prevent double-counting.
     """
-    # Use the new flag to prevent logic from running more than once per transaction
-    if instance.is_ledger_posted:
-        return 
+    with transaction.atomic():
+        # Get old values (default to 0 if new)
+        old_total = getattr(instance, '_old_total_amount', Decimal('0.00'))
+        old_cost = getattr(instance, '_old_supplier_cost', Decimal('0.00'))
 
-    # We only book cost once the transaction is officially created (after initial save)
-    # The check for status here is simplified to just check the operation type
-    if instance.pk: # Ensure it's not a temporary instance
-        with transaction.atomic():
-            today = instance.created_at.date()
-            user = instance.created_by
+        # --- 1. REVENUE (Sales) ---
+        revenue_diff = instance.total_amount - old_total
+        
+        if revenue_diff != 0:
+            is_increase = revenue_diff > 0
+            abs_diff = abs(revenue_diff)
+            
+            LedgerEntry.objects.create(
+                booking=instance,
+                account='Revenue:Sales',
+                date=instance.created_at,
+                # description=... (REMOVED: Field does not exist in DB)
+                debit=0 if is_increase else abs_diff,
+                credit=abs_diff if is_increase else 0,
+                created_by=instance.created_by
+            )
 
-            # --- LOGIC: ISSUE or CHANGE (We owe supplier money) ---
-            if instance.operation_type in ['issue', 'change']:
-                if instance.supplier_cost > Decimal('0.00'):
-                    # Debit Expense (Cost) | Credit Liability (Accounts Payable)
-                    create_ledger(today, "Expense:Supplier Cost", instance.supplier_cost, 0, instance, user)
-                    create_ledger(today, "Liabilities:Supplier Payable", 0, instance.supplier_cost, instance, user)
-                    
-                    # Mark as processed
-                    Booking.objects.filter(pk=instance.pk).update(is_ledger_posted=True)
+        # --- 2. EXPENSE (Supplier Cost) ---
+        cost_diff = instance.supplier_cost - old_cost
+        
+        if cost_diff != 0:
+            is_increase = cost_diff > 0
+            abs_diff = abs(cost_diff)
+            
+            # A. Expense Side
+            LedgerEntry.objects.create(
+                booking=instance,
+                account='Expense:Supplier Cost',
+                date=instance.created_at,
+                # description=... (REMOVED)
+                debit=abs_diff if is_increase else 0,
+                credit=0 if is_increase else abs_diff, 
+                created_by=instance.created_by
+            )
+            
+            # B. Liability Side
+            LedgerEntry.objects.create(
+                booking=instance,
+                account='Liabilities:Supplier Payable',
+                date=instance.created_at,
+                # description=... (REMOVED)
+                debit=0 if is_increase else abs_diff, 
+                credit=abs_diff if is_increase else 0, 
+                created_by=instance.created_by
+            )
 
-            # --- LOGIC: REFUND (Supplier refunds us money) ---
-            elif instance.operation_type == 'refund':
-                if instance.refund_amount_supplier > Decimal('0.00'):
-                    # Debit Liability (Reduced debt) | Credit Expense (Cost Reversal)
-                    create_ledger(today, "Liabilities:Supplier Payable", instance.refund_amount_supplier, 0, instance, user)
-                    create_ledger(today, "Expense:Supplier Cost", 0, instance.refund_amount_supplier, instance, user)
-                    
-                    Booking.objects.filter(pk=instance.pk).update(is_ledger_posted=True)
+@receiver(post_save, sender=Payment)
+def update_ledger_on_payment(sender, instance, created, **kwargs):
+    """
+    CASH BASIS: Money moving hands.
+    """
+    if not created: return 
+
+    with transaction.atomic():
+        # ledger_ref = ... (REMOVED: Field does not exist in DB)
+        
+        cash_account = 'Assets:CASH' 
+        if instance.method == 'BANK': cash_account = 'Assets:Bank'
+        elif instance.method == 'CHECK': cash_account = 'Assets:Check'
+
+        LedgerEntry.objects.create(
+            # reference=... (REMOVED)
+            booking=instance.booking,
+            date=instance.date,
+            # description=... (REMOVED)
+            account=cash_account,
+            debit=instance.amount,
+            credit=0,
+            created_by=instance.created_by
+        )
+        
+        # Update Status
+        booking = instance.booking
+        total_paid = sum(p.amount for p in booking.payments.all())
+        
+        new_status = booking.payment_status
+        if total_paid >= booking.total_amount:
+            new_status = 'PAID'
+        elif total_paid > 0:
+            new_status = 'PARTIAL'
+        else:
+            new_status = 'PENDING'
+        
+        if booking.payment_status != new_status:
+            booking.payment_status = new_status
+            booking.save(update_fields=['payment_status'])

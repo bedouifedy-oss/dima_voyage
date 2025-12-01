@@ -1,20 +1,9 @@
-# core/forms.py
 from django import forms
-from django.contrib import messages
 from django.core.exceptions import ValidationError
 from .models import Booking, VisaApplication
 
 class BookingAdminForm(forms.ModelForm):
-    """
-    Combined Form:
-    1. Enforces Customer Locking (Safety).
-    2. Provides "Command Center" for Payments (Efficiency).
-    """
-    
-    # --- COMMAND CENTER: GHOST FIELDS ---
-    # These fields do not exist in the Booking model. 
-    # They are used to trigger actions in admin.py.
-
+    # --- GHOST FIELDS (Command Center) ---
     PAYMENT_CHOICES = [
         ('none', '⚪ Save Only (No Payment)'),
         ('full', '🟢 Full Payment (Auto-Calc)'),
@@ -35,7 +24,7 @@ class BookingAdminForm(forms.ModelForm):
         decimal_places=2,
         max_digits=10,
         min_value=0,
-        widget=forms.NumberInput(attrs={'placeholder': 'Enter Amount (if partial)'}),
+        widget=forms.NumberInput(attrs={'placeholder': 'Enter Amount'}),
         label="Amount",
         help_text="Required if choosing Partial or Refund."
     )
@@ -50,41 +39,40 @@ class BookingAdminForm(forms.ModelForm):
     class Meta:
         model = Booking
         fields = '__all__'
-    
+
     def clean(self):
         cleaned_data = super().clean()
         
-        # --- PART 1: YOUR EXISTING SAFETY LOGIC ---
+        # --- 1. CRITICAL SECURITY: CLIENT LOCKING ---
+        # Ensure that if this is a sub-transaction (Refund/Change), 
+        # it belongs to the same client as the parent booking.
         parent_booking = cleaned_data.get("parent_booking")
         client = cleaned_data.get("client")
         operation_type = cleaned_data.get("operation_type")
         
-        # Check 1: Client Locking
         if parent_booking and operation_type in ['change', 'refund']:
             if client != parent_booking.client:
+                # This error blocks the save if the agent tries to mix clients
                 self.add_error('client', 
-                               f"⛔ Customer Mismatch! You cannot link this to Parent Booking '{parent_booking.ref}' "
-                               f"because it belongs to {parent_booking.client.name}, not {client.name}.")
-        
-        # Check 2: Self-Referencing
-        if parent_booking and self.instance.pk and parent_booking.pk == self.instance.pk:
-            self.add_error('parent_booking', "⛔ A booking cannot be its own parent.")
+                    f"⛔ SECURITY ERROR: You cannot link this transaction to Parent Booking '{parent_booking.ref}' "
+                    f"because it belongs to {parent_booking.client.name}, but you selected {client.name}."
+                )
 
-        # --- PART 2: NEW PAYMENT LOGIC ---
+        # --- 2. Prevent Self-Referencing ---
+        if self.instance.pk and parent_booking and parent_booking.pk == self.instance.pk:
+            self.add_error('parent_booking', "⛔ Logic Error: A booking cannot be its own parent.")
+
+        # --- 3. Payment Logic Validation ---
         action = cleaned_data.get('payment_action')
         amount = cleaned_data.get('transaction_amount')
 
         if action in ['partial', 'refund'] and not amount:
-            self.add_error('transaction_amount', "⚠️ You selected a Payment Action but did not enter an Amount.")
+            self.add_error('transaction_amount', "⚠️ Missing Data: You selected a Payment Action but did not enter an Amount.")
 
         return cleaned_data
 
-
+# (Keep your VisaForm as is)
 class VisaForm(forms.ModelForm):
-    """
-    Form for the public client-facing Visa application (RTL/LTR support).
-    (Kept exactly as you provided)
-    """
     class Meta:
         model = VisaApplication
         exclude = ['booking', 'submitted_at']
@@ -94,17 +82,15 @@ class VisaForm(forms.ModelForm):
             'passport_expiry_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'departure_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'return_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            
             'address': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'previous_visa_details': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'itinerary': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'emergency_contact': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
             'guarantor_details': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
-            
             'accommodation_type': forms.Select(attrs={'class': 'form-select'}),
             'payer': forms.Select(attrs={'class': 'form-select'}),
         }
-
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields:
