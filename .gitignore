@@ -1,9 +1,18 @@
-# .gitignore
-*.pyc
-__pycache__
-db.sqlite3
+# --- Security & Local Settings ---
 .env
+db.sqlite3
+*.log
 .DS_Store
-.venv
-media/.DS_Store
-.DS_Store
+
+# --- The Vault (Phase 3) ---
+# Prevents client passport photos from going to GitHub
+media/
+visas/ 
+
+# --- Python & Django ---
+__pycache__/
+*.py[cod]
+venv/
+env/
+.pytest_cache/
+staticfiles/

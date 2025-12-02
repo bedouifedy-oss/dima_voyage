@@ -6,34 +6,112 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0003_alter_booking_ref'),
+        ("core", "0003_alter_booking_ref"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='KnowledgeBase',
+            name="KnowledgeBase",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=200, verbose_name="Titre de l'article")),
-                ('category', models.CharField(choices=[('outgoing', 'Outgoing'), ('locale', 'Locale'), ('billetterie', 'Billetterie'), ('omra', 'Omra'), ('voyages', 'Voyages organisés'), ('visas', 'Visas'), ('autre', 'Autre')], max_length=50, verbose_name='Catégorie principale')),
-                ('summary', models.TextField(help_text='Description concise en 2-3 lignes', verbose_name='Résumé')),
-                ('objective', models.TextField(blank=True, verbose_name='Objectif principal')),
-                ('prerequisites', models.TextField(blank=True, help_text='Compétences, outils, informations nécessaires', verbose_name='Pré-requis')),
-                ('procedure', models.TextField(help_text='Format long, numérotez clairement chaque étape', verbose_name='Procédure détaillée')),
-                ('example', models.TextField(blank=True, verbose_name='Exemple concret')),
-                ('escalation_contact', models.CharField(blank=True, max_length=200, verbose_name="Contacts d'escalade")),
-                ('tags', models.CharField(blank=True, help_text='Séparez-les par des virgules', max_length=200, verbose_name='Mots-clés / Tags')),
-                ('utility_score', models.IntegerField(choices=[(1, '1'), (2, '2'), (3, '3'), (4, '4'), (5, '5')], default=3, verbose_name='Utilité')),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('author', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Auteur')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "title",
+                    models.CharField(max_length=200, verbose_name="Titre de l'article"),
+                ),
+                (
+                    "category",
+                    models.CharField(
+                        choices=[
+                            ("outgoing", "Outgoing"),
+                            ("locale", "Locale"),
+                            ("billetterie", "Billetterie"),
+                            ("omra", "Omra"),
+                            ("voyages", "Voyages organisés"),
+                            ("visas", "Visas"),
+                            ("autre", "Autre"),
+                        ],
+                        max_length=50,
+                        verbose_name="Catégorie principale",
+                    ),
+                ),
+                (
+                    "summary",
+                    models.TextField(
+                        help_text="Description concise en 2-3 lignes",
+                        verbose_name="Résumé",
+                    ),
+                ),
+                (
+                    "objective",
+                    models.TextField(blank=True, verbose_name="Objectif principal"),
+                ),
+                (
+                    "prerequisites",
+                    models.TextField(
+                        blank=True,
+                        help_text="Compétences, outils, informations nécessaires",
+                        verbose_name="Pré-requis",
+                    ),
+                ),
+                (
+                    "procedure",
+                    models.TextField(
+                        help_text="Format long, numérotez clairement chaque étape",
+                        verbose_name="Procédure détaillée",
+                    ),
+                ),
+                (
+                    "example",
+                    models.TextField(blank=True, verbose_name="Exemple concret"),
+                ),
+                (
+                    "escalation_contact",
+                    models.CharField(
+                        blank=True, max_length=200, verbose_name="Contacts d'escalade"
+                    ),
+                ),
+                (
+                    "tags",
+                    models.CharField(
+                        blank=True,
+                        help_text="Séparez-les par des virgules",
+                        max_length=200,
+                        verbose_name="Mots-clés / Tags",
+                    ),
+                ),
+                (
+                    "utility_score",
+                    models.IntegerField(
+                        choices=[(1, "1"), (2, "2"), (3, "3"), (4, "4"), (5, "5")],
+                        default=3,
+                        verbose_name="Utilité",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "author",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                        verbose_name="Auteur",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Base de Connaissances',
-                'verbose_name_plural': 'Base de Connaissances',
+                "verbose_name": "Base de Connaissances",
+                "verbose_name_plural": "Base de Connaissances",
             },
         ),
     ]

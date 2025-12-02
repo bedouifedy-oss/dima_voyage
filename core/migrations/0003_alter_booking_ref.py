@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0002_booking_is_supplier_paid_alter_booking_booking_type_and_more'),
+        ("core", "0002_booking_is_supplier_paid_alter_booking_booking_type_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='booking',
-            name='ref',
+            model_name="booking",
+            name="ref",
             field=models.CharField(blank=True, max_length=30, unique=True),
         ),
     ]

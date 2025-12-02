@@ -18,6 +18,7 @@ services:
       && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/code
+      - ./media:/code/media
     ports:
       - "8000:8000"
     depends_on:
@@ -45,3 +46,4 @@ services:
 
 volumes:
   db_data: # Persist Postgres data
+  media_volume:

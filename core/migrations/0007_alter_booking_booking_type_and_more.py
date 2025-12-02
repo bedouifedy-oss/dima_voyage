@@ -4,20 +4,41 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0006_historicalbooking_historicalexpense_and_more'),
+        ("core", "0006_historicalbooking_historicalexpense_and_more"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='booking',
-            name='booking_type',
-            field=models.CharField(choices=[('outgoing_hotel', 'Outgoing Hotel'), ('local_hotel', 'Local Hotel'), ('ticket', 'Ticket'), ('omra', 'Omra'), ('trip', 'Trip'), ('visa_app', 'Visa / Services - Application'), ('visa_dummy', 'Visa / Services - Dummy Booking')], max_length=40),
+            model_name="booking",
+            name="booking_type",
+            field=models.CharField(
+                choices=[
+                    ("outgoing_hotel", "Outgoing Hotel"),
+                    ("local_hotel", "Local Hotel"),
+                    ("ticket", "Ticket"),
+                    ("omra", "Omra"),
+                    ("trip", "Trip"),
+                    ("visa_app", "Visa / Services - Application"),
+                    ("visa_dummy", "Visa / Services - Dummy Booking"),
+                ],
+                max_length=40,
+            ),
         ),
         migrations.AlterField(
-            model_name='historicalbooking',
-            name='booking_type',
-            field=models.CharField(choices=[('outgoing_hotel', 'Outgoing Hotel'), ('local_hotel', 'Local Hotel'), ('ticket', 'Ticket'), ('omra', 'Omra'), ('trip', 'Trip'), ('visa_app', 'Visa / Services - Application'), ('visa_dummy', 'Visa / Services - Dummy Booking')], max_length=40),
+            model_name="historicalbooking",
+            name="booking_type",
+            field=models.CharField(
+                choices=[
+                    ("outgoing_hotel", "Outgoing Hotel"),
+                    ("local_hotel", "Local Hotel"),
+                    ("ticket", "Ticket"),
+                    ("omra", "Omra"),
+                    ("trip", "Trip"),
+                    ("visa_app", "Visa / Services - Application"),
+                    ("visa_dummy", "Visa / Services - Dummy Booking"),
+                ],
+                max_length=40,
+            ),
         ),
     ]

@@ -14,16 +14,26 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
+from django.conf import settings
+from django.conf.urls.static import static
 # config/urls.py
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 from django.views.generic import RedirectView
-from core.views import invoice_pdf
-from core.views import airport_autocomplete, invoice_pdf # Import the new view
+
+from core.views import airport_autocomplete, invoice_pdf  # Import the new view
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('invoice/<int:booking_id>/', invoice_pdf, name='invoice_pdf'),
-    path('', RedirectView.as_view(url='/admin/', permanent=False)),
-    path('api/airport-autocomplete/', airport_autocomplete, name='airport_autocomplete'),
+    path("admin/", admin.site.urls),
+    path("", include("core.urls")),
+    path("invoice/<int:booking_id>/", invoice_pdf, name="invoice_pdf"),
+    path("", RedirectView.as_view(url="/admin/", permanent=False)),
+    path(
+        "api/airport-autocomplete/", airport_autocomplete, name="airport_autocomplete"
+    ),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
