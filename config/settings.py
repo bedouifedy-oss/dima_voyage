@@ -143,12 +143,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- UNFOLD CONFIGURATION ---
+
 UNFOLD = {
     "SITE_TITLE": "Dima Voyage",
     "SITE_HEADER": "Dima Admin",
     "SITE_URL": "/",
-    # Use SITE_ICON to place the image beside the text
-    "SITE_ICON": lambda request: static("dima_voyages.png"),
+    "SITE_ICON": "dima_voyages.png",  # String path is safe now
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
@@ -160,17 +160,26 @@ UNFOLD = {
                     {
                         "title": "Bookings",
                         "icon": "airplane_ticket",
-                        "link": reverse_lazy("admin:core_booking_changelist"),
+                        "link": "/admin/core/booking/",
+                        "permission": lambda request: request.user.has_perm("core.view_booking"),
                     },
                     {
                         "title": "Clients",
                         "icon": "group",
-                        "link": reverse_lazy("admin:core_client_changelist"),
+                        "link": "/admin/core/client/",
+                        "permission": lambda request: request.user.has_perm("core.view_client"),
+                    },
+                    {
+                        "title": "Visa Applications",
+                        "icon": "badge",
+                        "link": "/admin/core/visaapplication/",
+                        "permission": lambda request: request.user.has_perm("core.view_visaapplication"),
                     },
                     {
                         "title": "Suppliers",
                         "icon": "store",
-                        "link": reverse_lazy("admin:core_supplier_changelist"),
+                        "link": "/admin/core/supplier/",
+                        "permission": lambda request: request.user.has_perm("core.view_supplier"),
                     },
                 ],
             },
@@ -181,36 +190,40 @@ UNFOLD = {
                     {
                         "title": "Payments",
                         "icon": "payments",
-                        "link": reverse_lazy("admin:core_payment_changelist"),
+                        "link": "/admin/core/payment/",
+                        # The Agent Hiding Trick
+                        "permission": lambda request: request.user.has_perm("core.change_payment"),
                     },
                     {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
-                        "link": reverse_lazy("admin:core_ledgerentry_changelist"),
+                        "link": "/admin/core/ledgerentry/",
+                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
                     },
                     {
                         "title": "Expenses",
                         "icon": "receipt_long",
-                        "link": reverse_lazy("admin:core_expense_changelist"),
+                        "link": "/admin/core/expense/",
+                        "permission": lambda request: request.user.has_perm("core.view_expense"),
                     },
                 ],
             },
             {
-                "title": "Support & Updates",  # <--- Updated Section Title
+                "title": "Support & Updates",
                 "separator": True,
                 "items": [
                     {
                         "title": "Announcements",
                         "icon": "campaign",
-                        "link": reverse_lazy("admin:core_announcement_changelist"),
-                        # 🔥 The Notification Badge
-                        # It calls the function badge_callback() in core/utils.py
+                        "link": "/admin/core/announcement/",
                         "badge": "core.utils.badge_callback",
+                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
                     },
                     {
                         "title": "Knowledge Base",
                         "icon": "menu_book",
-                        "link": reverse_lazy("admin:core_knowledgebase_changelist"),
+                        "link": "/admin/core/knowledgebase/",
+                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
                     },
                 ],
             },
