@@ -3,12 +3,14 @@ import requests
 from amadeus import Client, ResponseError
 from django.urls import reverse
 
+
 def send_visa_whatsapp(request, booking, lang):
     """
     Sends the Visa Form link via WhatsApp to the client.
     Returns: (bool: Success?, str: Message)
     """
-    from core.models import WhatsAppSettings # Import inside to avoid circular dependency
+    from core.models import \
+        WhatsAppSettings  # Import inside to avoid circular dependency
 
     config = WhatsAppSettings.objects.first()
     if not config:
@@ -18,35 +20,29 @@ def send_visa_whatsapp(request, booking, lang):
         return False, f"⚠️ Error: No phone number found for {booking.client.name}."
 
     # Generate Link
-    link = request.build_absolute_uri(reverse('public_visa_form', args=[booking.ref]))
-    
+    link = request.build_absolute_uri(reverse("public_visa_form", args=[booking.ref]))
+
     # Select Template
-    msg_template = config.template_fr if lang == 'fr' else config.template_tn
-    
+    msg_template = config.template_fr if lang == "fr" else config.template_tn
+
     # Format Message
     try:
         msg = msg_template.format(
-            client_name=booking.client.name, 
-            link=link, 
-            ref=booking.ref
+            client_name=booking.client.name, link=link, ref=booking.ref
         )
     except KeyError:
         msg = f"Hello {booking.client.name}, please upload your documents here: {link}"
 
     # Send via API
     try:
-        payload = {
-            "token": config.api_token,
-            "to": booking.client.phone,
-            "body": msg
-        }
+        payload = {"token": config.api_token, "to": booking.client.phone, "body": msg}
         response = requests.post(config.api_url, data=payload)
-        
+
         if response.status_code == 200:
             return True, "Sent successfully."
         else:
             return False, f"API Error: {response.text}"
-            
+
     except Exception as e:
         return False, f"Connection Error: {str(e)}"
 

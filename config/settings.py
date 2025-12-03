@@ -14,10 +14,9 @@ import os
 from pathlib import Path
 
 import dj_database_url
+import sentry_sdk
 from django.templatetags.static import static  # <--- CRITICAL IMPORT FOR LOGO
 from django.urls import reverse_lazy
-
-import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 
 # Initialize Sentry ONLY if a DSN is provided in .env
@@ -30,7 +29,7 @@ if SENTRY_DSN:
         # Set to 1.0 to capture 100% of errors in development/early production
         traces_sample_rate=1.0,
         # If you use Celery later, add CeleryIntegration here too
-        send_default_pii=True, # captures user info (be careful with privacy laws)
+        send_default_pii=True,  # captures user info (be careful with privacy laws)
     )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -272,22 +271,22 @@ if not DEBUG:
     # 1. Force HTTPS
     # Redirect all HTTP traffic to HTTPS
     SECURE_SSL_REDIRECT = True
-    
+
     # 2. Secure Cookies
     # Ensure cookies are only sent over HTTPS (prevents theft)
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # 3. Browser Security Headers
     # Prevent the browser from guessing content types (MIME sniffing)
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    
+
     # Enable the browser's XSS filtering (Cross-Site Scripting)
     SECURE_BROWSER_XSS_FILTER = True
-    
+
     # Prevent your site from being embedded in an iframe (Clickjacking protection)
-    X_FRAME_OPTIONS = 'DENY'
-    
+    X_FRAME_OPTIONS = "DENY"
+
     # 4. HSTS (HTTP Strict Transport Security)
     # Tells the browser: "Hey, ONLY ever talk to me via HTTPS for the next year"
     SECURE_HSTS_SECONDS = 31536000  # 1 year

@@ -1,24 +1,22 @@
 # core/admin.py
 import secrets
 import string
-import requests
 from datetime import datetime
 
+import requests
 from django.contrib import admin, messages
 from django.db import models  # Essential for the Filter
 from django.db.models import F, Sum, Value
 from django.db.models.functions import Coalesce
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html
-from django.shortcuts import redirect
 from unfold.admin import ModelAdmin
 
 from .forms import BookingAdminForm
-from .models import (
-    AmadeusSettings, Announcement, Booking, Client, Expense,
-    FlightTicket, KnowledgeBase, LedgerEntry, Payment,
-    Supplier, User, VisaApplication, WhatsAppSettings
-)
+from .models import (AmadeusSettings, Announcement, Booking, Client, Expense,
+                     FlightTicket, KnowledgeBase, LedgerEntry, Payment,
+                     Supplier, User, VisaApplication, WhatsAppSettings)
 
 
 # --- CUSTOM FILTERS ---
@@ -210,59 +208,68 @@ class BookingAdmin(ModelAdmin):
             )
 
     # --- NEW ACTION LOGIC ---
-    
+
     def send_whatsapp_link(self, obj):
-        if not obj.pk: return "-"
+        if not obj.pk:
+            return "-"
         return format_html(
             '<span style="color: gray;">Go to "Bookings List" > Select this booking > Choose "Send Visa Form" from Actions menu.</span>'
         )
-    
+
     send_whatsapp_link.short_description = "Send WhatsApp"
-    
+
     def configure_whatsapp_send(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
-                request, "⚠️ Please select exactly one booking to configure.", messages.WARNING
+                request,
+                "⚠️ Please select exactly one booking to configure.",
+                messages.WARNING,
             )
             return
-        
+
         booking = queryset.first()
         # Redirect to our new configuration page
-        return redirect('admin_configure_visa', booking_id=booking.pk)
-    
+        return redirect("admin_configure_visa", booking_id=booking.pk)
+
     configure_whatsapp_send.short_description = "📤 Configure & Send Visa Form"
 
     # --- WHATSAPP SENDING LOGIC (Added) ---
 
     def send_whatsapp_tn(self, request, queryset):
-        self._send_whatsapp_logic(request, queryset, lang='tn')
+        self._send_whatsapp_logic(request, queryset, lang="tn")
+
     send_whatsapp_tn.short_description = "🇹🇳 Send Visa Form (Tunisian)"
 
     def send_whatsapp_fr(self, request, queryset):
-        self._send_whatsapp_logic(request, queryset, lang='fr')
+        self._send_whatsapp_logic(request, queryset, lang="fr")
+
     send_whatsapp_fr.short_description = "🇫🇷 Send Visa Form (French)"
 
     def _send_whatsapp_logic(self, request, queryset, lang):
         config = WhatsAppSettings.objects.first()
         if not config:
-            self.message_user(request, "❌ Error: WhatsApp Settings not configured.", messages.ERROR)
+            self.message_user(
+                request, "❌ Error: WhatsApp Settings not configured.", messages.ERROR
+            )
             return
 
         count = 0
         for booking in queryset:
             if booking.client.phone:
                 # Generate the Public Link (This now uses your configured fields!)
-                link = request.build_absolute_uri(reverse('public_visa_form', args=[booking.ref]))
-                
+                link = request.build_absolute_uri(
+                    reverse("public_visa_form", args=[booking.ref])
+                )
+
                 # Select Template
-                msg_template = config.template_fr if lang == 'fr' else config.template_tn
-                
+                msg_template = (
+                    config.template_fr if lang == "fr" else config.template_tn
+                )
+
                 # Format Message
                 try:
                     msg = msg_template.format(
-                        client_name=booking.client.name, 
-                        link=link, 
-                        ref=booking.ref
+                        client_name=booking.client.name, link=link, ref=booking.ref
                     )
                 except KeyError:
                     # Fallback if template has wrong placeholders
@@ -273,14 +280,18 @@ class BookingAdmin(ModelAdmin):
                     payload = {
                         "token": config.api_token,
                         "to": booking.client.phone,
-                        "body": msg
+                        "body": msg,
                     }
                     requests.post(config.api_url, data=payload)
                     count += 1
                 except Exception as e:
-                    self.message_user(request, f"⚠️ Failed to send to {booking.client.name}: {e}", messages.WARNING)
-        
-        lang_name = "French" if lang == 'fr' else "Tunisian"
+                    self.message_user(
+                        request,
+                        f"⚠️ Failed to send to {booking.client.name}: {e}",
+                        messages.WARNING,
+                    )
+
+        lang_name = "French" if lang == "fr" else "Tunisian"
         self.message_user(request, f"✅ Sent {lang_name} form to {count} clients.")
 
     # --- UI Helpers ---
