@@ -7,6 +7,7 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
+        import core.signals
         # Implicitly connect signal handlers decorated with @receiver
         pass
 

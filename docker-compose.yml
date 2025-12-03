@@ -1,21 +1,24 @@
 services:
   db:
     image: postgres:16
+    # Load secrets from .env file
+    env_file:
+      - .env
+    # Map the variables from .env to the container environment
     environment:
-      POSTGRES_USER: dima
-      POSTGRES_PASSWORD: change_this_securely # ⚠️ MUST change for production
-      POSTGRES_DB: dima_finance
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - db_data:/var/lib/postgresql/data
+      - ./scripts/db_init:/docker-entrypoint-initdb.d
     ports:
-      - "5432:5432" # Exposes DB port locally (optional)
+      - "5432:5432"
 
   web:
     build: .
-    command: >
-      bash -c "python manage.py makemigrations core
-      && python manage.py migrate 
-      && python manage.py runserver 0.0.0.0:8000"
+    # Standard command (migrations run separately or via entrypoint in production)
+    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/code
       - ./media:/code/media
@@ -23,27 +26,29 @@ services:
       - "8000:8000"
     depends_on:
       - db
-    environment:
-      # Connection string for Django to access the 'db' service
-      DATABASE_URL: postgres://dima:change_this_securely@db:5432/dima_finance
-      
+    # Load secrets from .env file
+    env_file:
+      - .env
+    # We pass DATABASE_URL directly from .env, so no extra environment block is needed here
+    # unless you want to override specific values.
+
   metabase:
     image: metabase/metabase:latest
     ports:
       - "3000:3000"
+    # Metabase still needs its own internal config.
+    # If you want to secure this too, add MB_ variables to .env and use env_file here.
+    # For now, I kept it as is to avoid breaking your Metabase setup.
     environment:
-      # Metabase uses its own internal DB (postgres)
       MB_DB_TYPE: postgres
       MB_DB_DBNAME: metabase
       MB_DB_PORT: 5432
       MB_DB_USER: metabase_user
       MB_DB_PASS: metabase_password
-      MB_DB_HOST: db         # NOTE: You would typically run a separate DB for metabase's metadata. 
-                             # For simplicity, we'll keep the Metabase config as is, 
-                             # but you will configure it later to connect to the 'db' service as a data source.
+      MB_DB_HOST: db
     depends_on:
       - db
 
 volumes:
-  db_data: # Persist Postgres data
-  media_volume:
+  db_data:
+  media_volume: # Kept for legacy compatibility, though ./media mapping handles the vault now
