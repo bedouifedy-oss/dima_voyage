@@ -6,8 +6,21 @@ import os
 from pathlib import Path
 
 import dj_database_url
-from django.templatetags.static import static 
+import sentry_sdk
+from django.templatetags.static import static
 from django.urls import reverse_lazy
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Initialize Sentry ONLY if a DSN is provided in .env
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        traces_sample_rate=1.0,
+        send_default_pii=True,
+    )
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,9 +37,9 @@ ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
 # Application definition
 
 INSTALLED_APPS = [
-    "unfold",  
-    "unfold.contrib.filters",  
-    "simple_history",  
+    "unfold",
+    "unfold.contrib.filters",
+    "simple_history",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -40,14 +53,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware", # Static files in prod
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "simple_history.middleware.HistoryRequestMiddleware", 
+    "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -108,13 +121,14 @@ STATICFILES_DIRS = [
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# --- UNFOLD CONFIGURATION (The Fixed Version) ---
+
+# --- UNFOLD CONFIGURATION (SAFE MODE) ---
+# Removed all lambdas and permissions to guarantee load
 UNFOLD = {
     "SITE_TITLE": "Dima Voyage",
     "SITE_HEADER": "Dima Admin",
     "SITE_URL": "/",
-    # Use direct string for icon to avoid 'str object not callable' error
-    "SITE_ICON": "dima_voyages.png",
+    "SITE_ICON": "/static/dima_voyages.png",
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
@@ -127,25 +141,21 @@ UNFOLD = {
                         "title": "Bookings",
                         "icon": "airplane_ticket",
                         "link": "/admin/core/booking/",
-                        "permission": lambda request: request.user.has_perm("core.view_booking"),
                     },
                     {
                         "title": "Clients",
                         "icon": "group",
                         "link": "/admin/core/client/",
-                        "permission": lambda request: request.user.has_perm("core.view_client"),
                     },
                     {
                         "title": "Visa Applications",
                         "icon": "badge",
                         "link": "/admin/core/visaapplication/",
-                        "permission": lambda request: request.user.has_perm("core.view_visaapplication"),
                     },
                     {
                         "title": "Suppliers",
                         "icon": "store",
                         "link": "/admin/core/supplier/",
-                        "permission": lambda request: request.user.has_perm("core.view_supplier"),
                     },
                 ],
             },
@@ -157,19 +167,16 @@ UNFOLD = {
                         "title": "Payments",
                         "icon": "payments",
                         "link": "/admin/core/payment/",
-                        "permission": lambda request: request.user.has_perm("core.change_payment"),
                     },
                     {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
                         "link": "/admin/core/ledgerentry/",
-                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
                     },
                     {
                         "title": "Expenses",
                         "icon": "receipt_long",
                         "link": "/admin/core/expense/",
-                        "permission": lambda request: request.user.has_perm("core.view_expense"),
                     },
                 ],
             },
@@ -182,13 +189,11 @@ UNFOLD = {
                         "icon": "campaign",
                         "link": "/admin/core/announcement/",
                         "badge": "core.utils.badge_callback",
-                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
                     },
                     {
                         "title": "Knowledge Base",
                         "icon": "menu_book",
                         "link": "/admin/core/knowledgebase/",
-                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
                     },
                 ],
             },
@@ -198,12 +203,11 @@ UNFOLD = {
 
 # --- SECURITY HARDENING ---
 if not DEBUG:
-    # 1. Force HTTPS (Disabled for IP Access)
+    # Disabled for IP Access
     SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
 
-    # 2. Basic Security
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
