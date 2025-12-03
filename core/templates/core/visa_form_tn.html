@@ -11,8 +11,8 @@
         .header-bg { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 15px 15px 0 0; }
         .btn-primary { background-color: #2a5298; border: none; padding: 10px 30px; }
         .form-label { font-weight: 600; color: #34495e; margin-top: 10px; }
-        /* LTR Support for English fields if needed */
-        .ltr-input input, .ltr-input textarea { direction: ltr; text-align: left; }
+        /* Force LTR for inputs (dates/numbers) inside RTL layout */
+        input[type="date"], input[type="text"].ltr { direction: ltr; text-align: right; }
     </style>
 </head>
 <body>
@@ -21,7 +21,7 @@
             <div class="col-md-8">
                 <div class="card">
                     <div class="header-bg text-center">
-                        <h3>📋 Visa Application</h3>
+                        <h3>📋 مطلب الفيزا</h3>
                         <p class="mb-0">Booking Ref: <strong>{{ booking.ref }}</strong></p>
                         <p>{{ booking.client.name }}</p>
                     </div>
@@ -31,18 +31,18 @@
                             
                             {% if form.errors %}
                                 <div class="alert alert-danger">
-                                    <strong>Please fix the errors below:</strong>
+                                    <strong>ثمة غلطة في تعمير البيانات:</strong>
                                     {{ form.errors }}
                                 </div>
                             {% endif %}
 
                             <div class="row">
                                 <div class="col-12 mb-3">
-                                    <label class="form-label">Passport Photo / صورة جواز السفر <span class="text-danger">*</span></label>
+                                    <label class="form-label">تصويرة الباسبور / Photo <span class="text-danger">*</span></label>
                                     {{ form.photo }}
                                 </div>
                                 <div class="col-12 mb-3">
-                                    <label class="form-label">Passport Number / رقم جواز السفر <span class="text-danger">*</span></label>
+                                    <label class="form-label">رقم الباسبور / Passport N° <span class="text-danger">*</span></label>
                                     {{ form.passport_number }}
                                 </div>
                             </div>
@@ -53,19 +53,13 @@
                                         <div class="col-md-6 mb-3">
                                             <label class="form-label">{{ field.label }}</label>
                                             {{ field }}
-                                            {% if field.help_text %}
-                                                <small class="form-text text-muted">{{ field.help_text }}</small>
-                                            {% endif %}
-                                            {% if field.errors %}
-                                                <div class="text-danger small">{{ field.errors }}</div>
-                                            {% endif %}
                                         </div>
                                     {% endif %}
                                 {% endfor %}
                             </div>
 
                             <div class="d-grid gap-2 mt-4">
-                                <button type="submit" class="btn btn-primary btn-lg">Submit Application / إرسال</button>
+                                <button type="submit" class="btn btn-primary btn-lg">إرسال / Submit</button>
                             </div>
                         </form>
                     </div>

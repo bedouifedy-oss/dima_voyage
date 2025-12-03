@@ -11,6 +11,8 @@ from .constants import (BOOKING_TYPES, OPERATION_TYPES,  # NEW IMPORT
 
 User = get_user_model()
 
+def default_visa_fields():
+    return ["passport_number", "photo", "full_name"]
 
 # --- SUPPORTING ACTORS ---
 class Client(models.Model):
@@ -45,7 +47,11 @@ class Booking(models.Model):
         related_name="amendments",
         help_text="Link to original booking for Change/Refund",
     )
-
+    visa_form_config = models.JSONField(
+        default=default_visa_fields, 
+        blank=True, 
+        verbose_name="Public Form Fields"
+    )
     # Choices are now imported from .constants
     booking_type = models.CharField(
         "Service Type", max_length=40, choices=BOOKING_TYPES
@@ -124,31 +130,36 @@ class Booking(models.Model):
 
 # --- FINANCIAL MODELS ---
 class Payment(models.Model):
+    # FIX 1: Uppercase keys to match forms.py and Admin logic
     PAYMENT_METHODS = [
-        ("cash", "Cash"),
-        ("card", "Card"),
-        ("bank", "Bank Transfer"),
-        ("mobile", "Mobile Money"),
+        ("CASH", "Cash"),
+        ("CARD", "Card"),
+        ("BANK", "Bank Transfer"),
+        ("MOBILE", "Mobile Money"),
+        ("CHECK", "Check"), # Added to match your form options
     ]
+    
     booking = models.ForeignKey(
         Booking,
         on_delete=models.CASCADE,
-        related_name="payments",
+        related_name="payments", # Critical for Admin 'Balance' calculation
         null=True,
         blank=True,
     )
+    
     amount = models.DecimalField(max_digits=12, decimal_places=2)
-    method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
+    method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="CASH")
     date = models.DateField()
     reference = models.CharField(max_length=100, blank=True, null=True)
+    
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # Tracking history is excellent for financial auditing
     history = HistoricalRecords()
 
     def __str__(self):
-        return f"Payment of {self.amount}"
-
-
+        return f"{self.get_method_display()} of {self.amount}"
 class Expense(models.Model):
     name = models.CharField(max_length=200)
     amount = models.DecimalField(max_digits=12, decimal_places=2)

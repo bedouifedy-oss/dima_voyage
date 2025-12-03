@@ -17,6 +17,22 @@ import dj_database_url
 from django.templatetags.static import static  # <--- CRITICAL IMPORT FOR LOGO
 from django.urls import reverse_lazy
 
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+# Initialize Sentry ONLY if a DSN is provided in .env
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        # Set to 1.0 to capture 100% of errors in development/early production
+        traces_sample_rate=1.0,
+        # If you use Celery later, add CeleryIntegration here too
+        send_default_pii=True, # captures user info (be careful with privacy laws)
+    )
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -163,25 +179,33 @@ UNFOLD = {
                         "title": "Bookings",
                         "icon": "airplane_ticket",
                         "link": "/admin/core/booking/",
-                        "permission": lambda request: request.user.has_perm("core.view_booking"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_booking"
+                        ),
                     },
                     {
                         "title": "Clients",
                         "icon": "group",
                         "link": "/admin/core/client/",
-                        "permission": lambda request: request.user.has_perm("core.view_client"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_client"
+                        ),
                     },
                     {
                         "title": "Visa Applications",
                         "icon": "badge",
                         "link": "/admin/core/visaapplication/",
-                        "permission": lambda request: request.user.has_perm("core.view_visaapplication"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_visaapplication"
+                        ),
                     },
                     {
                         "title": "Suppliers",
                         "icon": "store",
                         "link": "/admin/core/supplier/",
-                        "permission": lambda request: request.user.has_perm("core.view_supplier"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_supplier"
+                        ),
                     },
                 ],
             },
@@ -194,19 +218,25 @@ UNFOLD = {
                         "icon": "payments",
                         "link": "/admin/core/payment/",
                         # The Agent Hiding Trick
-                        "permission": lambda request: request.user.has_perm("core.change_payment"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.change_payment"
+                        ),
                     },
                     {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
                         "link": "/admin/core/ledgerentry/",
-                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_ledgerentry"
+                        ),
                     },
                     {
                         "title": "Expenses",
                         "icon": "receipt_long",
                         "link": "/admin/core/expense/",
-                        "permission": lambda request: request.user.has_perm("core.view_expense"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_expense"
+                        ),
                     },
                 ],
             },
@@ -219,16 +249,47 @@ UNFOLD = {
                         "icon": "campaign",
                         "link": "/admin/core/announcement/",
                         "badge": "core.utils.badge_callback",
-                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_announcement"
+                        ),
                     },
                     {
                         "title": "Knowledge Base",
                         "icon": "menu_book",
                         "link": "/admin/core/knowledgebase/",
-                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_knowledgebase"
+                        ),
                     },
                 ],
             },
         ],
     },
 }
+
+# --- SECURITY HARDENING ---
+if not DEBUG:
+    # 1. Force HTTPS
+    # Redirect all HTTP traffic to HTTPS
+    SECURE_SSL_REDIRECT = True
+    
+    # 2. Secure Cookies
+    # Ensure cookies are only sent over HTTPS (prevents theft)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    
+    # 3. Browser Security Headers
+    # Prevent the browser from guessing content types (MIME sniffing)
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    
+    # Enable the browser's XSS filtering (Cross-Site Scripting)
+    SECURE_BROWSER_XSS_FILTER = True
+    
+    # Prevent your site from being embedded in an iframe (Clickjacking protection)
+    X_FRAME_OPTIONS = 'DENY'
+    
+    # 4. HSTS (HTTP Strict Transport Security)
+    # Tells the browser: "Hey, ONLY ever talk to me via HTTPS for the next year"
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True

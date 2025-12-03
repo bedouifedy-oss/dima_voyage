@@ -11,3 +11,4 @@ pytest-django
 pytest
 pytest-django
 whitenoise
+sentry-sdk

@@ -41,37 +41,43 @@ def test_full_payment_flow(admin_client):
     }
     
     url = "/admin/core/booking/add/"
-    response = admin_client.post(url, data)
-
-    # --- VERBOSE DEBUGGING ---
+    response = admin_client.post(url, data, secure=True)
+    
+    # --- SAFE DEBUGGING BLOCK ---
     if response.status_code != 302:
-        print("\n❌ --- SAVE FAILED (200 OK) ---")
+        print(f"\n❌ --- SAVE FAILED (Status {response.status_code}) ---")
         
-        if 'adminform' in response.context:
-            print(f"Main Form Valid? {response.context['adminform'].form.is_valid()}")
-            print(f"Main Form Errors: {response.context['adminform'].form.errors}")
-            print(f"Main Form Non-Field Errors: {response.context['adminform'].form.non_field_errors()}")
+        # Safely check for context
+        context = getattr(response, 'context', None)
+        
+        if context:
+            if 'adminform' in context:
+                print(f"Main Form Errors: {context['adminform'].form.errors}")
+                print(f"Main Form Non-Field: {context['adminform'].form.non_field_errors()}")
 
-        if 'inline_admin_formsets' in response.context:
-            print("\n--- Checking Inlines ---")
-            for formset in response.context['inline_admin_formsets']:
-                fs = formset.formset
-                prefix = fs.prefix
-                print(f"Inline '{prefix}': Valid? {fs.is_valid()}")
-                if not fs.is_valid():
-                    print(f"   Errors: {fs.errors}")
-                    print(f"   Non-Form Errors: {fs.non_form_errors()}")
-                    # Check if Management Form is valid
-                    if not fs.management_form.is_valid():
-                        print(f"   CRITICAL: Management Form Invalid!")
-                        print(f"   {fs.management_form.errors}")
+            if 'inline_admin_formsets' in context:
+                print("\n--- Checking Inlines ---")
+                for formset in context['inline_admin_formsets']:
+                    fs = formset.formset
+                    if not fs.is_valid():
+                        print(f"Inline '{fs.prefix}' Errors: {fs.errors}")
+                        print(f"Non-Form Errors: {fs.non_form_errors()}")
+                        if not fs.management_form.is_valid():
+                            print(f"CRITICAL: Management Form Invalid! {fs.management_form.errors}")
+        else:
+            print("⚠️ Context is None! Dumping raw HTML content to find the error:")
+            # Print the first 5000 characters of HTML to find the error message
+            print(response.content.decode()[:5000])
 
-        pytest.fail("Booking save failed. Check the Verbose Output above.")
+        pytest.fail("Booking save failed. See debug info above.")
 
     # 3. Assertions
-    # We grab the FIRST booking created to verify it saved correctly
     booking = Booking.objects.first()
     
+    # If booking wasn't created, fail with a clear message
+    if not booking:
+        pytest.fail("❌ Booking object was not created in the database.")
+
     print(f"\n✅ Booking Created: {booking.ref}")
     assert booking.total_amount == Decimal("5000.00")
     assert booking.payment_status == "PAID"
