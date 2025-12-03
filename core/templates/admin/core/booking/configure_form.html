@@ -1,0 +1,235 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    /* Custom Styles for Configuration Page */
+    .config-container {
+        background: #f8f9fa; 
+        padding: 20px; 
+        border-radius: 8px; 
+        border: 1px solid #ddd;
+    }
+    
+    .section-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .section-header {
+        background: #f1f3f4;
+        padding: 10px 20px;
+        font-weight: bold;
+        color: #333;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .section-body {
+        padding: 15px 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 10px;
+    }
+
+    .checkbox-row {
+        display: flex;
+        align-items: center;
+        padding: 5px;
+    }
+
+    .checkbox-row:hover {
+        background-color: #f8f9fa;
+        border-radius: 4px;
+    }
+
+    .checkbox-row input {
+        margin-right: 10px;
+        transform: scale(1.2);
+        cursor: pointer;
+    }
+
+    .checkbox-row label {
+        cursor: pointer;
+        font-size: 13px;
+        color: #555;
+        user-select: none;
+    }
+
+    .btn-mini {
+        font-size: 10px;
+        padding: 4px 8px;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        text-transform: uppercase;
+        color: #555;
+    }
+
+    .btn-mini:hover {
+        background: #e9ecef;
+        border-color: #bbb;
+    }
+
+    /* Global Controls */
+    .global-controls {
+        margin-bottom: 20px;
+        display: flex;
+        gap: 10px;
+    }
+    
+    /* Hide the original messy list until JS sorts it */
+    #original-fields {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="module">
+    <h1 style="margin-bottom: 20px;">Configure Visa Form for {{ booking.client.name }}</h1>
+    
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="config-container">
+            <h3 style="margin-top: 0;">1. Select Fields</h3>
+            <p class="help">Choose which fields the client must fill out. (Passport & Photo are mandatory).</p>
+            
+            <div class="global-controls">
+                <button type="button" class="button" onclick="toggleGlobal(true)">✅ Select All</button>
+                <button type="button" class="button" onclick="toggleGlobal(false)">❌ Deselect All</button>
+            </div>
+
+            <div id="structured-form"></div>
+
+            <div id="original-fields">
+                {{ form.selected_fields }}
+            </div>
+        </div>
+
+        <div class="submit-row" style="display: flex; gap: 10px; padding: 15px; background: #fff; border-top: 1px solid #ddd; margin-top: 20px;">
+            <input type="submit" value="✅ Save & Send (Tunisian)" name="_send_tn" class="default" 
+                   style="background: #28a745; color: white; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer;">
+            
+            <input type="submit" value="🇫🇷 Save & Send (French)" name="_send_fr" 
+                   style="background: #007bff; color: white; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer;">
+            
+            <div style="flex-grow: 1;"></div>
+
+            <input type="submit" value="💾 Save Configuration Only" name="_save" 
+                   style="background: #6c757d; color: white; border: none; padding: 10px 20px; cursor: pointer;">
+        </div>
+    </form>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // 1. Define Sections and their keywords/fields
+        const sections = {
+            "Personal Info": ["full_name", "dob", "nationality", "has_previous_visa", "previous_visa_details"],
+            "Passport Details": ["passport_issue_date", "passport_expiry_date"],
+            "Contact & Address": ["phone", "email", "address", "emergency_contact"],
+            "Trip Details": ["travel_reason", "departure_date", "return_date", "itinerary"],
+            "Accommodation & Host": ["accommodation_type", "host_name", "host_address", "host_phone", "host_email", "host_relationship", "hotel_name", "hotel_address", "hotel_reservation"],
+            "Financial & Documents": ["payer", "guarantor_details", "ticket_departure", "ticket_return", "travel_insurance", "financial_proofs"],
+            "Consents": ["consent_accurate", "consent_data", "consent_send_docs"]
+        };
+
+        const originalContainer = document.getElementById("original-fields");
+        const targetContainer = document.getElementById("structured-form");
+        
+        // Get all checkbox labels (Django renders them as <label><input>...</label>)
+        // We need to extract them and move them.
+        const labels = Array.from(originalContainer.querySelectorAll('div > label'));
+
+        // Helper to create section HTML
+        function createSection(title, id) {
+            const div = document.createElement('div');
+            div.className = 'section-card';
+            div.innerHTML = `
+                <div class="section-header">
+                    <span>${title}</span>
+                    <button type="button" class="btn-mini" onclick="toggleSection('${id}', this)">Select All</button>
+                </div>
+                <div class="section-body" id="${id}"></div>
+            `;
+            return div;
+        }
+
+        // Create Sections in DOM
+        const sectionMap = {};
+        for (const [name, fields] of Object.entries(sections)) {
+            const id = 'sec-' + name.replace(/\s+/g, '-').toLowerCase();
+            const sectionEl = createSection(name, id);
+            targetContainer.appendChild(sectionEl);
+            sectionMap[name] = sectionEl.querySelector('.section-body');
+        }
+        
+        // Create a "Misc" section for anything we missed
+        const miscId = 'sec-misc';
+        const miscSection = createSection("Other Fields", miscId);
+        targetContainer.appendChild(miscSection);
+        const miscBody = miscSection.querySelector('.section-body');
+
+        // Move Inputs to Sections
+        labels.forEach(label => {
+            const input = label.querySelector('input');
+            const value = input.value; // Field name (e.g., 'dob')
+            
+            // Create a nice wrapper
+            const wrapper = document.createElement('div');
+            wrapper.className = 'checkbox-row';
+            wrapper.appendChild(input); // Move input
+            wrapper.appendChild(document.createTextNode(label.textContent.trim())); // Move text
+
+            let placed = false;
+            for (const [name, fields] of Object.entries(sections)) {
+                if (fields.includes(value)) {
+                    sectionMap[name].appendChild(wrapper);
+                    placed = true;
+                    break;
+                }
+            }
+
+            if (!placed) {
+                miscBody.appendChild(wrapper);
+            }
+        });
+
+        // Hide empty Misc section if unused
+        if (miscBody.children.length === 0) {
+            miscSection.style.display = 'none';
+        }
+    });
+
+    // --- Toggle Functions ---
+
+    function toggleGlobal(checked) {
+        const checkboxes = document.querySelectorAll('#structured-form input[type="checkbox"]');
+        checkboxes.forEach(cb => cb.checked = checked);
+    }
+
+    function toggleSection(sectionId, btn) {
+        const container = document.getElementById(sectionId);
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        
+        // Check if all are currently checked to decide whether to select or deselect
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        const newState = !allChecked;
+
+        checkboxes.forEach(cb => cb.checked = newState);
+        
+        // Update button text
+        btn.textContent = newState ? "Deselect All" : "Select All";
+    }
+</script>
+{% endblock %}
