@@ -113,8 +113,8 @@ UNFOLD = {
     "SITE_TITLE": "Dima Voyage",
     "SITE_HEADER": "Dima Admin",
     "SITE_URL": "/",
-    # Use string path for logo to be safe
-    "SITE_ICON": lambda request: static("dima_voyages.png"),
+    # Use direct string for icon to avoid 'str object not callable' error
+    "SITE_ICON": "dima_voyages.png",
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
@@ -163,4 +163,47 @@ UNFOLD = {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
                         "link": "/admin/core/ledgerentry/",
-                        "permission": lambda request:
+                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
+                    },
+                    {
+                        "title": "Expenses",
+                        "icon": "receipt_long",
+                        "link": "/admin/core/expense/",
+                        "permission": lambda request: request.user.has_perm("core.view_expense"),
+                    },
+                ],
+            },
+            {
+                "title": "Support & Updates",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Announcements",
+                        "icon": "campaign",
+                        "link": "/admin/core/announcement/",
+                        "badge": "core.utils.badge_callback",
+                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
+                    },
+                    {
+                        "title": "Knowledge Base",
+                        "icon": "menu_book",
+                        "link": "/admin/core/knowledgebase/",
+                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
+                    },
+                ],
+            },
+        ],
+    },
+}
+
+# --- SECURITY HARDENING ---
+if not DEBUG:
+    # 1. Force HTTPS (Disabled for IP Access)
+    SECURE_SSL_REDIRECT = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+
+    # 2. Basic Security
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = "DENY"
