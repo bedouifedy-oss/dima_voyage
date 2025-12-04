@@ -13,7 +13,6 @@ from .models import Booking, VisaApplication
 from .utils import search_airports, send_visa_whatsapp
 
 
-@staff_member_required
 def configure_visa_form(request, booking_id):
     """
     Admin View: Allows staff to select fields AND send the message in one go.
@@ -29,6 +28,13 @@ def configure_visa_form(request, booking_id):
                 "photo",
             ]
             booking.visa_form_config = selection
+            
+            # --- FIX: Self-Healing Data for Legacy Records ---
+            # If this old booking has no status (NULL), give it a default so history doesn't crash
+            if not booking.status:
+                booking.status = 'quote'
+            # -------------------------------------------------
+
             booking.save()
 
             # 2. CHECK WHICH BUTTON WAS CLICKED
@@ -70,7 +76,6 @@ def configure_visa_form(request, booking_id):
         "admin/core/booking/configure_form.html",
         {"form": form, "booking": booking},
     )
-
 
 def invoice_pdf(request, booking_id):
     # 1. Get the booking
@@ -121,10 +126,10 @@ def public_visa_form(request, ref):
 
     # Template setup
     if lang == "fr":
-        success_msg = "Votre dossier a été transmis avec succès."
+        success_msg = "Votre dossier a été transmis avec succès"
         form_template = "core/visa_form_fr.html"  # Ensure you have this template (we made it earlier)
     else:
-        success_msg = "دوسيك وصلنا وباش نركحوه. تو نكلموك."
+        success_msg = "دوسيك وصلنا وباش نركحوه. تو نكلموك"
         form_template = "core/visa_form_tn.html"  # Ensure you have this template
 
     if request.method == "POST":

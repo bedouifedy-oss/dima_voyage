@@ -59,6 +59,19 @@ class Booking(models.Model):
     operation_type = models.CharField(
         "Action", max_length=20, choices=OPERATION_TYPES, default="issue"
     )
+
+    STATUS_CHOICES = [
+        ("quote", "📝 Quote / Draft"),
+        ("confirmed", "✅ Confirmed"),
+        ("cancelled", "🚫 Cancelled"),
+    ]
+    status = models.CharField(
+        "Booking Status", 
+        max_length=20, 
+        choices=STATUS_CHOICES, 
+        default="quote"  # Default ensures old records don't crash
+    )
+    
     payment_status = models.CharField(
         "Payment Status", max_length=20, choices=PAYMENT_STATUSES, default="pending"
     )
@@ -100,9 +113,9 @@ class Booking(models.Model):
     history = HistoricalRecords()
 
     def save(self, *args, **kwargs):
+        # 1. Generate Ref if missing (New Booking)
         if not self.ref:
             today_str = timezone.now().strftime("%Y%m%d")
-            # Dynamic Prefix based on Operation
             prefix_map = {"issue": "BK", "change": "CHG", "refund": "REF"}
             prefix = f"{prefix_map.get(self.operation_type, 'BK')}-{today_str}"
 
@@ -112,6 +125,12 @@ class Booking(models.Model):
                 count += 1
                 new_ref = f"{prefix}-{count + 1:03d}"
             self.ref = new_ref
+        
+        # 2. Self-Heal Status (Prevent IntegrityError on old records)
+        # This must be OUTSIDE the 'if not self.ref' block to fix existing records too
+        if not self.status:
+            self.status = 'quote'
+            
         super().save(*args, **kwargs)
 
     @property
@@ -126,7 +145,7 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"{self.ref} ({self.get_booking_type_display()})"
-
+       
 
 # --- FINANCIAL MODELS ---
 class Payment(models.Model):
@@ -326,16 +345,16 @@ class VisaApplication(models.Model):
     # --- ESSENTIALS (Public Form) ---
     # We keep these required because the form asks for them
     full_name = models.CharField(
-        "الاسم الكامل", max_length=200, blank=True, null=True
+        "Full Name", max_length=200, blank=True, null=True
     )  # Made optional just in case
-    passport_number = models.CharField("رقم الباسبور", max_length=50)  # REQUIRED
+    passport_number = models.CharField("Passport Number", max_length=50)  # REQUIRED
     photo = models.ImageField(upload_to="visas/photos/")  # REQUIRED
 
     # --- DETAILS (Relaxed for later entry) ---
-    dob = models.DateField("تاريخ الولادة", blank=True, null=True)
-    nationality = models.CharField("الجنسية", max_length=100, blank=True, null=True)
-    passport_issue_date = models.DateField("تاريخ إصدار", blank=True, null=True)
-    passport_expiry_date = models.DateField("تاريخ انتهاء", blank=True, null=True)
+    dob = models.DateField("Date of Birth", blank=True, null=True)
+    nationality = models.CharField("Nationality", max_length=100, blank=True, null=True)
+    passport_issue_date = models.DateField("Issue Date", blank=True, null=True)
+    passport_expiry_date = models.DateField("Expiry Date", blank=True, null=True)
 
     # --- OPTIONAL HISTORY ---
     has_previous_visa = models.BooleanField(default=False)

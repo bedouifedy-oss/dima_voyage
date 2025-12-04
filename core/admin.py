@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 
-from .forms import BookingAdminForm
+from .forms import BookingAdminForm, VisaInlineForm
 from .models import (AmadeusSettings, Announcement, Booking, Client, Expense,
                      FlightTicket, KnowledgeBase, LedgerEntry, Payment,
                      Supplier, User, VisaApplication, WhatsAppSettings)
@@ -72,6 +72,7 @@ class PaymentHistoryInline(admin.TabularInline):
 
 class VisaInline(admin.StackedInline):
     model = VisaApplication
+    form = VisaInlineForm  # <--- ACTIVATE THE FIX HERE
     can_delete = False
     verbose_name_plural = "📄 Visa Application Data"
     fields = (

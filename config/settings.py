@@ -11,9 +11,8 @@ from django.templatetags.static import static
 from django.urls import reverse_lazy
 from sentry_sdk.integrations.django import DjangoIntegration
 
-# Initialize Sentry ONLY if a DSN is provided in .env
+# Initialize Sentry
 SENTRY_DSN = os.environ.get("SENTRY_DSN")
-
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
@@ -22,20 +21,16 @@ if SENTRY_DSN:
         send_default_pii=True,
     )
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Build paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
+# Security
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-fallback-key")
-
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG") == "True"
-
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
 
 
 # Application definition
-
 INSTALLED_APPS = [
     "unfold",
     "unfold.contrib.filters",
@@ -107,7 +102,7 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
+# Static files
 STATIC_URL = "/static/"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 MEDIA_URL = "/media/"
@@ -122,13 +117,12 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
-# --- UNFOLD CONFIGURATION (SAFE MODE) ---
-# Removed all lambdas and permissions to guarantee load
+# --- UNFOLD CONFIGURATION ---
 UNFOLD = {
     "SITE_TITLE": "Dima Voyage",
     "SITE_HEADER": "Dima Admin",
     "SITE_URL": "/",
-    "SITE_ICON": "/static/dima_voyages.png",
+    "SITE_ICON": "/static/dima_voyages.png", # Safe String
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
@@ -141,21 +135,25 @@ UNFOLD = {
                         "title": "Bookings",
                         "icon": "airplane_ticket",
                         "link": "/admin/core/booking/",
+                        "permission": lambda request: request.user.has_perm("core.view_booking"),
                     },
                     {
                         "title": "Clients",
                         "icon": "group",
                         "link": "/admin/core/client/",
+                        "permission": lambda request: request.user.has_perm("core.view_client"),
                     },
                     {
                         "title": "Visa Applications",
                         "icon": "badge",
                         "link": "/admin/core/visaapplication/",
+                        "permission": lambda request: request.user.has_perm("core.view_visaapplication"),
                     },
                     {
                         "title": "Suppliers",
                         "icon": "store",
                         "link": "/admin/core/supplier/",
+                        "permission": lambda request: request.user.has_perm("core.view_supplier"),
                     },
                 ],
             },
@@ -167,16 +165,19 @@ UNFOLD = {
                         "title": "Payments",
                         "icon": "payments",
                         "link": "/admin/core/payment/",
+                        "permission": lambda request: request.user.has_perm("core.change_payment"),
                     },
                     {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
                         "link": "/admin/core/ledgerentry/",
+                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
                     },
                     {
                         "title": "Expenses",
                         "icon": "receipt_long",
                         "link": "/admin/core/expense/",
+                        "permission": lambda request: request.user.has_perm("core.view_expense"),
                     },
                 ],
             },
@@ -189,11 +190,13 @@ UNFOLD = {
                         "icon": "campaign",
                         "link": "/admin/core/announcement/",
                         "badge": "core.utils.badge_callback",
+                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
                     },
                     {
                         "title": "Knowledge Base",
                         "icon": "menu_book",
                         "link": "/admin/core/knowledgebase/",
+                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
                     },
                 ],
             },
@@ -203,11 +206,9 @@ UNFOLD = {
 
 # --- SECURITY HARDENING ---
 if not DEBUG:
-    # Disabled for IP Access
     SECURE_SSL_REDIRECT = False
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
-
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
