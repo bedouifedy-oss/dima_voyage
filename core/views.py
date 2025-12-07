@@ -1,18 +1,55 @@
 # core/views.py
+from decimal import Decimal
+
 import weasyprint
-from django.contrib import messages
+from django.contrib import admin, messages  # <--- Added 'admin' here
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
+from django.db.models import Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 
+from .finance import FinanceStats
 from .forms import VisaFieldConfigurationForm, VisaForm
 from .models import Booking, VisaApplication
 from .utils import search_airports, send_visa_whatsapp
 
 
+# --- FINANCIAL DASHBOARD VIEW ---
+@staff_member_required
+def financial_dashboard(request):
+    # 1. Get Admin Context
+    context = admin.site.each_context(request)
+
+    # 2. Fetch Raw Numbers
+    # CHANGE: We now use 'get_gross_client_cash_in' for the Revenue Card
+    raw_cash_in = FinanceStats.get_gross_client_cash_in()
+
+    supplier_costs = FinanceStats.get_net_supplier_cost_paid()
+    balance = FinanceStats.get_net_cash_balance()
+    unpaid_debt = FinanceStats.get_unpaid_liabilities()
+
+    # 3. Profit (Optional calculation for context)
+    # If you want Profit to be (Cash In - Costs), use this:
+    cash_profit = raw_cash_in - supplier_costs
+
+    context.update(
+        {
+            "title": "Financial Dashboard",
+            "total_revenue": raw_cash_in,  # <--- Shows Total Cash In
+            "total_paid_to_suppliers": supplier_costs,
+            "current_balance": balance,
+            "unpaid_debt": unpaid_debt,
+            "profit": cash_profit,
+        }
+    )
+
+    return render(request, "core/dashboard.html", context)
+
+
+# --- VISA CONFIGURATION VIEW ---
 def configure_visa_form(request, booking_id):
     """
     Admin View: Allows staff to select fields AND send the message in one go.
@@ -28,11 +65,10 @@ def configure_visa_form(request, booking_id):
                 "photo",
             ]
             booking.visa_form_config = selection
-            
+
             # --- FIX: Self-Healing Data for Legacy Records ---
-            # If this old booking has no status (NULL), give it a default so history doesn't crash
             if not booking.status:
-                booking.status = 'quote'
+                booking.status = "quote"
             # -------------------------------------------------
 
             booking.save()
@@ -44,7 +80,7 @@ def configure_visa_form(request, booking_id):
                 success, msg = send_visa_whatsapp(request, booking, "tn")
                 if success:
                     messages.success(
-                        request, f"✅ Configuration Saved & 🇹🇳 Message Sent!"
+                        request, "✅ Configuration Saved & 🇹🇳 Message Sent!"
                     )
                 else:
                     messages.error(request, msg)
@@ -54,7 +90,7 @@ def configure_visa_form(request, booking_id):
                 success, msg = send_visa_whatsapp(request, booking, "fr")
                 if success:
                     messages.success(
-                        request, f"✅ Configuration Saved & 🇫🇷 Message Sent!"
+                        request, "✅ Configuration Saved & 🇫🇷 Message Sent!"
                     )
                 else:
                     messages.error(request, msg)
@@ -77,31 +113,55 @@ def configure_visa_form(request, booking_id):
         {"form": form, "booking": booking},
     )
 
+
+# --- INVOICE GENERATION ---
 def invoice_pdf(request, booking_id):
     # 1. Get the booking
     booking = get_object_or_404(Booking, id=booking_id)
 
-    # 2. Context data for the template
+    # --- NEW CALCULATION LOGIC ---
+    # A. Sum Positive Payments
+    total_paid = booking.payments.filter(transaction_type="payment").aggregate(
+        total=Coalesce(Sum("amount"), Value(Decimal("0.00")))
+    )["total"]
+
+    # B. Sum Refunds
+    total_refunded = booking.payments.filter(transaction_type="refund").aggregate(
+        total=Coalesce(Sum("amount"), Value(Decimal("0.00")))
+    )["total"]
+
+    # C. Calculate Net (The true amount currently with us)
+    net_paid = total_paid - total_refunded
+
+    # D. Calculate Balance Due
+    balance_due = booking.total_amount - net_paid
+
+    # 3. Context data (Now includes the calculated math)
     context = {
         "booking": booking,
         "user": request.user,
-        "base_url": request.build_absolute_uri("/")[:-1],  # Helps images load in PDF
+        "base_url": request.build_absolute_uri("/")[:-1],
+        # Pass these explicit numbers to the template
+        "invoice_net_paid": net_paid,
+        "invoice_refunds": total_refunded,
+        "invoice_balance": balance_due,
     }
 
-    # 3. Render HTML to string
+    # 4. Render HTML to string
     html_string = render_to_string("core/invoice.html", context)
 
-    # 4. Convert to PDF using WeasyPrint
+    # 5. Convert to PDF
     pdf_file = weasyprint.HTML(
         string=html_string, base_url=request.build_absolute_uri()
     ).write_pdf()
 
-    # 5. Return PDF Response
+    # 6. Return Response
     response = HttpResponse(pdf_file, content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="invoice_{booking.ref}.pdf"'
     return response
 
 
+# --- UTILITIES ---
 @staff_member_required
 def airport_autocomplete(request):
     """
@@ -117,6 +177,7 @@ def airport_autocomplete(request):
     return JsonResponse(results, safe=False)
 
 
+# --- PUBLIC VISA FORM ---
 def public_visa_form(request, ref):
     booking = get_object_or_404(Booking, ref=ref)
     visa_instance = VisaApplication.objects.filter(booking=booking).first()
@@ -127,10 +188,10 @@ def public_visa_form(request, ref):
     # Template setup
     if lang == "fr":
         success_msg = "Votre dossier a été transmis avec succès"
-        form_template = "core/visa_form_fr.html"  # Ensure you have this template (we made it earlier)
+        form_template = "core/visa_form_fr.html"
     else:
         success_msg = "دوسيك وصلنا وباش نركحوه. تو نكلموك"
-        form_template = "core/visa_form_tn.html"  # Ensure you have this template
+        form_template = "core/visa_form_tn.html"
 
     if request.method == "POST":
         form = VisaForm(
@@ -138,7 +199,7 @@ def public_visa_form(request, ref):
             request.FILES,
             instance=visa_instance,
             visible_fields=booking.visa_form_config,
-            lang=lang,  # <--- CRITICAL: Pass language to form
+            lang=lang,
         )
 
         if form.is_valid():
@@ -164,7 +225,7 @@ def public_visa_form(request, ref):
         form = VisaForm(
             instance=visa_instance,
             visible_fields=booking.visa_form_config,
-            lang=lang,  # <--- CRITICAL: Pass language to form
+            lang=lang,
         )
 
     return render(

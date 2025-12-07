@@ -7,7 +7,6 @@ from pathlib import Path
 
 import dj_database_url
 import sentry_sdk
-from django.templatetags.static import static
 from django.urls import reverse_lazy
 from sentry_sdk.integrations.django import DjangoIntegration
 
@@ -27,7 +26,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-fallback-key")
 DEBUG = os.environ.get("DEBUG") == "True"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost").split(",")
+ALLOWED_HOSTS = [
+    "*",
+]
 
 
 # Application definition
@@ -88,7 +89,9 @@ DATABASES = {
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
@@ -122,7 +125,7 @@ UNFOLD = {
     "SITE_TITLE": "Dima Voyage",
     "SITE_HEADER": "Dima Admin",
     "SITE_URL": "/",
-    "SITE_ICON": "/static/dima_voyages.png", # Safe String
+    "SITE_ICON": "/static/dima_voyages.png",
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": False,
@@ -135,25 +138,33 @@ UNFOLD = {
                         "title": "Bookings",
                         "icon": "airplane_ticket",
                         "link": "/admin/core/booking/",
-                        "permission": lambda request: request.user.has_perm("core.view_booking"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_booking"
+                        ),
                     },
                     {
                         "title": "Clients",
                         "icon": "group",
                         "link": "/admin/core/client/",
-                        "permission": lambda request: request.user.has_perm("core.view_client"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_client"
+                        ),
                     },
                     {
                         "title": "Visa Applications",
                         "icon": "badge",
                         "link": "/admin/core/visaapplication/",
-                        "permission": lambda request: request.user.has_perm("core.view_visaapplication"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_visaapplication"
+                        ),
                     },
                     {
                         "title": "Suppliers",
                         "icon": "store",
                         "link": "/admin/core/supplier/",
-                        "permission": lambda request: request.user.has_perm("core.view_supplier"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_supplier"
+                        ),
                     },
                 ],
             },
@@ -161,23 +172,36 @@ UNFOLD = {
                 "title": "Finance",
                 "separator": True,
                 "items": [
+                    # --- NEW DASHBOARD LINK HERE ---
+                    {
+                        "title": "📊 Financial Dashboard",
+                        "icon": "analytics",  # Uses Google Material Symbols
+                        "link": reverse_lazy("financial_dashboard"),
+                    },
+                    # -------------------------------
                     {
                         "title": "Payments",
                         "icon": "payments",
                         "link": "/admin/core/payment/",
-                        "permission": lambda request: request.user.has_perm("core.change_payment"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.change_payment"
+                        ),
                     },
                     {
                         "title": "Ledger (Cash Flow)",
                         "icon": "account_balance",
                         "link": "/admin/core/ledgerentry/",
-                        "permission": lambda request: request.user.has_perm("core.view_ledgerentry"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_ledgerentry"
+                        ),
                     },
                     {
                         "title": "Expenses",
                         "icon": "receipt_long",
                         "link": "/admin/core/expense/",
-                        "permission": lambda request: request.user.has_perm("core.view_expense"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_expense"
+                        ),
                     },
                 ],
             },
@@ -190,13 +214,17 @@ UNFOLD = {
                         "icon": "campaign",
                         "link": "/admin/core/announcement/",
                         "badge": "core.utils.badge_callback",
-                        "permission": lambda request: request.user.has_perm("core.view_announcement"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_announcement"
+                        ),
                     },
                     {
                         "title": "Knowledge Base",
                         "icon": "menu_book",
                         "link": "/admin/core/knowledgebase/",
-                        "permission": lambda request: request.user.has_perm("core.view_knowledgebase"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_knowledgebase"
+                        ),
                     },
                 ],
             },

@@ -19,6 +19,7 @@ urlpatterns = [
         views.airport_autocomplete,
         name="airport_autocomplete",
     ),
+    path("dashboard/", views.financial_dashboard, name="financial_dashboard"),
     # --- Client Features (Public) ---
     # The public form sent via WhatsApp
     path("visa-form/<str:ref>/", views.public_visa_form, name="public_visa_form"),

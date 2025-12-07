@@ -6,8 +6,12 @@ from django.db import models
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
-from .constants import (BOOKING_TYPES, OPERATION_TYPES,  # NEW IMPORT
-                        PAYMENT_STATUSES)
+from .constants import BOOKING_STATUSES  # New
+from .constants import LEDGER_ENTRY_TYPES  # New
+from .constants import OPERATION_TYPES  # NEW IMPORT
+from .constants import PAYMENT_TRANSACTION_TYPES  # New
+from .constants import (BOOKING_TYPES, PAYMENT_STATUSES,
+                        SUPPLIER_PAYMENT_STATUSES)
 
 User = get_user_model()
 
@@ -66,12 +70,12 @@ class Booking(models.Model):
         ("cancelled", "🚫 Cancelled"),
     ]
     status = models.CharField(
-        "Booking Status", 
-        max_length=20, 
-        choices=STATUS_CHOICES, 
-        default="quote"  # Default ensures old records don't crash
+        "Booking Status",
+        max_length=20,
+        choices=BOOKING_STATUSES,  # Updated choice list
+        default="quote",
     )
-    
+
     payment_status = models.CharField(
         "Payment Status", max_length=20, choices=PAYMENT_STATUSES, default="pending"
     )
@@ -85,19 +89,27 @@ class Booking(models.Model):
     supplier_cost = models.DecimalField(
         "Supplier Cost", max_digits=12, decimal_places=2, default=Decimal("0.00")
     )
+
+    supplier_payment_status = models.CharField(
+        "Supplier Payment Status",
+        max_length=20,
+        choices=SUPPLIER_PAYMENT_STATUSES,  # Make sure to import this from constants!
+        default="unpaid",
+    )
+
     refund_amount_client = models.DecimalField(
         "Refund TO Client",
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
-        help_text="Amount we give back to client",
+        help_text="Legacy field - use Refunds action instead",
     )
     refund_amount_supplier = models.DecimalField(
         "Refund FROM Supplier",
         max_digits=12,
         decimal_places=2,
         default=Decimal("0.00"),
-        help_text="Amount received back from supplier",
+        help_text="Legacy field",
     )
 
     # Flag: Replaces is_supplier_paid
@@ -108,6 +120,7 @@ class Booking(models.Model):
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, related_name="booked_by"
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     history = HistoricalRecords()
@@ -125,45 +138,60 @@ class Booking(models.Model):
                 count += 1
                 new_ref = f"{prefix}-{count + 1:03d}"
             self.ref = new_ref
-        
+
         # 2. Self-Heal Status (Prevent IntegrityError on old records)
         # This must be OUTSIDE the 'if not self.ref' block to fix existing records too
         if not self.status:
-            self.status = 'quote'
-            
+            self.status = "quote"
+
         super().save(*args, **kwargs)
 
     @property
     def paid_amount(self):
-        # Calculates total paid by summing related payments
-        return self.payments.aggregate(total=models.Sum("amount"))["total"] or 0
+        # NEW LOGIC: Sum only 'payment' types, subtract 'refund' types
+        payments = (
+            self.payments.filter(transaction_type="payment").aggregate(
+                total=models.Sum("amount")
+            )["total"]
+            or 0
+        )
+        refunds = (
+            self.payments.filter(transaction_type="refund").aggregate(
+                total=models.Sum("amount")
+            )["total"]
+            or 0
+        )
+        return payments - refunds
 
     @property
     def outstanding(self):
-        # Dynamic calculation
         return self.total_amount - self.paid_amount
 
     def __str__(self):
         return f"{self.ref} ({self.get_booking_type_display()})"
-       
+
 
 # --- FINANCIAL MODELS ---
 class Payment(models.Model):
-    # FIX 1: Uppercase keys to match forms.py and Admin logic
     PAYMENT_METHODS = [
         ("CASH", "Cash"),
         ("CARD", "Card"),
         ("BANK", "Bank Transfer"),
         ("MOBILE", "Mobile Money"),
-        ("CHECK", "Check"),  # Added to match your form options
+        ("CHECK", "Check"),
     ]
 
     booking = models.ForeignKey(
         Booking,
         on_delete=models.CASCADE,
-        related_name="payments",  # Critical for Admin 'Balance' calculation
+        related_name="payments",
         null=True,
         blank=True,
+    )
+
+    # This allows us to store Refunds in this same table.
+    transaction_type = models.CharField(
+        max_length=20, choices=PAYMENT_TRANSACTION_TYPES, default="payment"
     )
 
     amount = models.DecimalField(max_digits=12, decimal_places=2)
@@ -174,11 +202,11 @@ class Payment(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Tracking history is excellent for financial auditing
     history = HistoricalRecords()
 
     def __str__(self):
-        return f"{self.get_method_display()} of {self.amount}"
+        direction = "OUT" if self.transaction_type == "refund" else "IN"
+        return f"[{direction}] {self.get_method_display()} : {self.amount}"
 
 
 class Expense(models.Model):
@@ -199,6 +227,16 @@ class Expense(models.Model):
 class LedgerEntry(models.Model):
     date = models.DateField()
     account = models.CharField(max_length=100)
+
+    # --- NEW FIELD: Strict Type ---
+    entry_type = models.CharField(
+        max_length=30,
+        choices=LEDGER_ENTRY_TYPES,
+        null=True,
+        blank=True,
+        help_text="Strict classification for reports",
+    )
+
     debit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     credit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     booking = models.ForeignKey(
@@ -206,6 +244,11 @@ class LedgerEntry(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    is_consolidated = models.BooleanField(
+        default=False,
+        help_text="True if this entry has been included in a Daily Revenue Closing",
+    )
 
     def __str__(self):
         return f"{self.date} - {self.account}: Dr={self.debit}, Cr={self.credit}"
@@ -406,3 +449,57 @@ class VisaApplication(models.Model):
 
     def __str__(self):
         return f"Visa: {self.full_name}"
+
+
+# In core/models.py, scroll to the bottom (after LedgerEntry)
+
+
+class BookingLedgerAllocation(models.Model):
+    """
+    The Safety Bridge: Links a real money move (LedgerEntry)
+    to a specific liability (Booking).
+    """
+
+    ledger_entry = models.ForeignKey(
+        LedgerEntry,
+        on_delete=models.CASCADE,
+        related_name="allocations",
+        help_text="The actual payment record",
+    )
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="supplier_allocations",
+        help_text="The booking debt being paid",
+    )
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="How much of this payment covers this specific booking",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Auto-update the booking status when an allocation is made
+        self.update_booking_status()
+
+    def update_booking_status(self):
+        """
+        Calculates if the booking is fully paid based on all allocations.
+        """
+        total_paid = self.booking.supplier_allocations.aggregate(
+            total=models.Sum("amount")
+        )["total"] or Decimal("0.00")
+
+        if total_paid >= self.booking.supplier_cost:
+            self.booking.supplier_payment_status = "paid"
+        elif total_paid > 0:
+            self.booking.supplier_payment_status = "partial"
+        else:
+            self.booking.supplier_payment_status = "unpaid"
+
+        self.booking.save(update_fields=["supplier_payment_status"])
+
+    def __str__(self):
+        return f"{self.amount} allocated to {self.booking.ref}"

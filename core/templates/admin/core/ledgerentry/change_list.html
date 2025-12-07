@@ -1,71 +1,290 @@
 {% extends "admin/change_list.html" %}
 {% load humanize %}
 
-{% block extrahead %}
-{{ block.super }}
+{% block result_list %}
+
 <style>
-    /* 🖨️ PRINT STYLES: These only run when you press Print */
+    /* --- 1. SCREEN STYLES (Modern Dashboard) --- */
+    .financial-summary-container {
+        /* Default Variables */
+        --bg-panel: #ffffff;
+        --bg-card: #f8f9fa;
+        --border-color: #e5e7eb;
+        --text-main: #1f2937;
+        --text-sub: #6b7280;
+        --shadow-color: rgba(0,0,0,0.05);
+        --btn-bg: #f3f4f6;
+        --btn-text: #374151;
+        --btn-hover: #e5e7eb;
+        
+        --color-blue: #2563eb;
+        --color-red: #dc2626;
+        --color-green: #16a34a;
+
+        /* Layout */
+        background: var(--bg-panel);
+        padding: 25px;
+        margin-bottom: 25px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 6px -1px var(--shadow-color);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--text-main);
+    }
+
+    /* Dark Mode Overrides (Unfold/Tailwind) */
+    html.dark .financial-summary-container,
+    body.dark .financial-summary-container,
+    [data-theme="dark"] .financial-summary-container {
+        --bg-panel: #1f2937;
+        --bg-card: #111827;
+        --border-color: #374151;
+        --text-main: #f9fafb;
+        --text-sub: #9ca3af;
+        --shadow-color: rgba(0,0,0,0.4);
+        --btn-bg: #374151;
+        --btn-text: #e5e7eb;
+        
+        --color-blue: #60a5fa;
+        --color-red: #f87171;
+        --color-green: #4ade80;
+    }
+
+    /* Layout Components */
+    .header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+        padding-bottom: 15px;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .dashboard-title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .print-btn {
+        background-color: var(--btn-bg);
+        color: var(--btn-text);
+        border: 1px solid var(--border-color);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.2s;
+    }
+    .print-btn:hover { background-color: var(--btn-hover); }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+
+    .metric-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 20px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .card-blue { border-left: 4px solid var(--color-blue); }
+    .card-red { border-left: 4px solid var(--color-red); }
+    .card-green { border-left: 4px solid var(--color-green); }
+
+    .metric-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--text-sub);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+    }
+
+    .metric-value {
+        display: block;
+        font-size: 24px;
+        font-weight: 800;
+    }
+    
+    .text-blue { color: var(--color-blue); }
+    .text-red { color: var(--color-red); }
+    .text-green { color: var(--color-green); }
+
+    .metric-icon {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        font-size: 20px;
+        opacity: 0.15;
+        filter: grayscale(100%);
+    }
+
+    /* Print Header (Hidden on Screen) */
+    .print-only-header { display: none; }
+
+    /* --- 2. PROFESSIONAL PRINT STYLES --- */
     @media print {
-        /* Hide the Django Admin Sidebar, Header, Breadcrumbs, and Action buttons */
-        #header, .breadcrumbs, .action-checkbox-column, .object-tools, #changelist-filter, .paginator {
+        /* Hide Admin UI Elements */
+        #header, #user-tools, .breadcrumbs, 
+        .action-checkbox, .actions, .object-tools, 
+        #changelist-filter, .paginator, #footer,
+        .print-btn, .dashboard-title {
             display: none !important;
         }
-        /* Hide the custom Print button itself */
-        #print-btn { display: none !important; }
 
-        /* Make the content full width */
-        #content { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-        #changelist { width: 100% !important; }
+        /* Reset Layout for Paper */
+        body, #content, #container {
+            margin: 0;
+            padding: 0;
+            background: #fff !important;
+            font-size: 12px;
+            font-family: "Times New Roman", Serif; /* Professional Serif for Reports */
+            color: #000 !important;
+            width: 100%;
+        }
+
+        /* Show Professional Header */
+        .print-only-header {
+            display: block;
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #000;
+        }
+        .print-only-header h1 { font-size: 24px; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+        .print-only-header p { font-size: 14px; color: #555; margin: 5px 0 0 0; }
+
+        /* Style the Financial Summary Box */
+        .financial-summary-container {
+            box-shadow: none;
+            border: none;
+            padding: 0;
+            margin-bottom: 30px;
+            background: transparent !important;
+        }
+
+        .metrics-grid {
+            display: flex; /* Use flex for a single row layout */
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .metric-card {
+            border: 1px solid #ddd !important;
+            background: #fff !important;
+            flex: 1;
+            border-radius: 4px;
+            padding: 15px;
+            page-break-inside: avoid;
+        }
+
+        /* Force Black & White text for printing */
+        .metric-value { color: #000 !important; font-size: 18px; }
+        .metric-label { color: #444 !important; }
+        .metric-icon { display: none; } /* Hide icons for cleanliness */
+
+        /* Style the Ledger Table */
+        #changelist { box-shadow: none; }
+        #changelist table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            border: 1px solid #000;
+        }
         
-        /* Typography for printing */
-        body { font-family: "Times New Roman", serif; font-size: 12pt; background: white; }
-        h2 { color: black !important; }
-        
-        /* Clean up the table */
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ccc !important; padding: 8px !important; }
-        
-        /* Ensure colors print (browsers sometimes hide background colors) */
-        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        #changelist table thead th {
+            background-color: #eee !important;
+            color: #000 !important;
+            border-bottom: 2px solid #000;
+            font-weight: bold;
+            text-transform: uppercase;
+            padding: 8px;
+        }
+
+        #changelist table tbody td {
+            border-bottom: 1px solid #ccc;
+            padding: 6px 8px;
+            color: #000;
+        }
+
+        /* Status Pills to Text */
+        #changelist table td span {
+            color: #000 !important; /* Remove colored text */
+            font-weight: normal;
+        }
+
+        /* Remove Links */
+        a { text-decoration: none; color: #000 !important; }
     }
 </style>
-{% endblock %}
 
-{% block result_list %}
-<div style="background: #fff; padding: 20px; margin-bottom: 20px; border-left: 5px solid #447e9b; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+<div class="print-only-header">
+    <h1>Financial Ledger Report</h1>
+    <p>Generated on {% now "F j, Y" %} at {% now "H:i" %}</p>
+</div>
+
+<div class="financial-summary-container">
     
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="margin-top: 0; color: #333; text-transform: uppercase; font-size: 14px; letter-spacing: 1px;">
-            Financial Summary (Based on current filters)
+    <div class="header-row">
+        <h2 class="dashboard-title">
+            <span>📊</span> Financial Summary
         </h2>
-        
-        <button id="print-btn" onclick="window.print()" style="background: #447e9b; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">
-            🖨️ Print Report
+        <button id="print-btn" class="print-btn" onclick="window.print()">
+            <span>🖨️</span> Print Report
         </button>
     </div>
-    
-    <div style="display: flex; gap: 40px; margin-top: 15px;">
-        <div>
-            <span style="display: block; font-size: 12px; color: #666;">TOTAL REVENUE</span>
-            <span style="font-size: 24px; font-weight: bold; color: #28a745;">
-                {{ summary.revenue|intcomma }} TND
+
+    <div class="metrics-grid">
+        <div class="metric-card card-blue">
+            <span class="metric-icon">💰</span>
+            <span class="metric-label">Cash Collected</span>
+            <span class="metric-value text-blue">
+                {{ summary.net_cash|intcomma }} TND
             </span>
         </div>
 
-        <div>
-            <span style="display: block; font-size: 12px; color: #666;">SUPPLIER COST / EXPENSES</span>
-            <span style="font-size: 24px; font-weight: bold; color: #dc3545;">
+        <div class="metric-card card-red">
+            <span class="metric-icon">📉</span>
+            <span class="metric-label">Supplier Cost (Net)</span>
+            <span class="metric-value text-red">
                 {{ summary.expense|intcomma }} TND
             </span>
         </div>
 
-        <div style="padding-left: 40px; border-left: 1px solid #eee;">
-            <span style="display: block; font-size: 12px; color: #666;">NET PROFIT</span>
-            <span style="font-size: 24px; font-weight: bold; color: {% if summary.profit >= 0 %}#333{% else %}#dc3545{% endif %};">
+        {% if summary.profit >= 0 %}
+        <div class="metric-card card-green">
+            <span class="metric-icon">📈</span>
+            <span class="metric-label">Accounting Profit</span>
+            <span class="metric-value text-green">
+                +{{ summary.profit|intcomma }} TND
+            </span>
+        </div>
+        {% else %}
+        <div class="metric-card card-red">
+            <span class="metric-icon">⚠️</span>
+            <span class="metric-label">Accounting Profit</span>
+            <span class="metric-value text-red">
                 {{ summary.profit|intcomma }} TND
             </span>
         </div>
+        {% endif %}
     </div>
 </div>
+
 {{ block.super }}
 {% endblock %}

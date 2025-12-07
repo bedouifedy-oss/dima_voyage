@@ -1,0 +1,252 @@
+{% extends "admin/base_site.html" %}
+{% load humanize %}
+
+{% block content %}
+
+<style>
+    /* --- 1. BASE STYLES (Applies to everyone) --- */
+    .dashboard-container {
+        /* Default (Light Mode) Variables defined DIRECTLY on the component */
+        --bg-panel: #ffffff;
+        --bg-card: #f8f9fa;
+        --border-color: #e5e7eb;
+        --text-main: #1f2937;
+        --text-sub: #6b7280;
+        --shadow-color: rgba(0,0,0,0.05);
+        --btn-bg: #f3f4f6;
+        --btn-text: #374151;
+        --btn-hover: #e5e7eb;
+        
+        --color-blue: #2563eb;
+        --color-red: #dc2626;
+        --color-green: #16a34a;
+        --color-orange: #f59e0b; /* For Liabilities */
+
+        /* Layout */
+        padding: 30px; 
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: var(--text-main);
+        transition: all 0.3s ease;
+    }
+
+    /* --- 2. DARK MODE OVERRIDES --- */
+    html.dark .dashboard-container,
+    body.dark .dashboard-container,
+    [data-theme="dark"] .dashboard-container {
+        --bg-panel: #1f2937;  /* Tailwind Gray-800 */
+        --bg-card: #111827;   /* Tailwind Gray-900 */
+        --border-color: #374151; /* Tailwind Gray-700 */
+        --text-main: #f9fafb; /* Tailwind Gray-50 */
+        --text-sub: #9ca3af;  /* Tailwind Gray-400 */
+        --shadow-color: rgba(0,0,0,0.4);
+        --btn-bg: #374151;
+        --btn-text: #e5e7eb;
+        --btn-hover: #4b5563;
+        
+        /* Brighter accent colors for dark backgrounds */
+        --color-blue: #60a5fa;
+        --color-red: #f87171;
+        --color-green: #4ade80;
+        --color-orange: #fbbf24;
+    }
+
+    /* --- 3. COMPONENT STYLES --- */
+    
+    .dashboard-title {
+        margin: 0 0 25px 0;
+        color: var(--text-main);
+        font-size: 24px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 25px;
+    }
+
+    .metric-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 25px;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 6px -1px var(--shadow-color);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 160px;
+    }
+
+    .metric-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 15px -3px var(--shadow-color);
+    }
+
+    /* Colored Borders */
+    .card-green { border-top: 5px solid var(--color-green); }
+    .card-blue { border-top: 5px solid var(--color-blue); }
+    .card-main { border-top: 5px solid var(--text-main); } /* Neutral for Balance */
+    .card-red { border-top: 5px solid var(--color-red); }
+
+    .metric-icon {
+        font-size: 28px;
+        margin-bottom: 15px;
+        opacity: 0.9;
+    }
+
+    .metric-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-sub);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 5px;
+    }
+
+    .metric-value {
+        display: block;
+        font-size: 32px;
+        font-weight: 800;
+        line-height: 1.1;
+        margin-bottom: 5px;
+    }
+
+    .metric-subtext {
+        font-size: 13px;
+        color: var(--text-sub);
+        opacity: 0.8;
+    }
+
+    /* Text Colors */
+    .text-green { color: var(--color-green); }
+    .text-blue { color: var(--color-blue); }
+    .text-red { color: var(--color-red); }
+    .text-main { color: var(--text-main); }
+
+    /* Action Button for Liabilities */
+    .action-area {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .btn-action {
+        display: inline-block;
+        background-color: var(--color-red);
+        color: white;
+        text-decoration: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        transition: opacity 0.2s;
+        text-align: center;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .btn-action:hover {
+        opacity: 0.9;
+        color: white;
+    }
+
+    /* Helper Box */
+    .helper-box {
+        margin-top: 40px;
+        padding: 20px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 14px;
+        color: var(--text-sub);
+        line-height: 1.6;
+    }
+    
+    .helper-box strong { color: var(--text-main); }
+
+</style>
+
+<div class="dashboard-container">
+
+    <h1 class="dashboard-title">
+        <span style="font-size: 32px;">📊</span> Financial Overview
+    </h1>
+
+    <div class="metrics-grid">
+
+        <div class="metric-card card-green">
+            <div>
+                <div class="metric-icon">💰</div>
+                <span class="metric-label">Total Revenue</span>
+                <span class="metric-value text-main">
+                    +{{ total_revenue|intcomma }} <small style="font-size: 16px; color: var(--text-sub);">TND</small>
+                </span>
+                <span class="metric-subtext">Confirmed Cash In</span>
+            </div>
+        </div>
+
+        <div class="metric-card card-blue">
+            <div>
+                <div class="metric-icon">📉</div>
+                <span class="metric-label">Supplier Costs (Paid)</span>
+                <span class="metric-value text-main">
+                    -{{ total_paid_to_suppliers|intcomma }} <small style="font-size: 16px; color: var(--text-sub);">TND</small>
+                </span>
+                <span class="metric-subtext">Money left the bank</span>
+            </div>
+        </div>
+
+        <div class="metric-card card-main">
+            <div>
+                <div class="metric-icon">🏦</div>
+                <span class="metric-label">Account Balance</span>
+                <span class="metric-value {% if current_balance >= 0 %}text-main{% else %}text-red{% endif %}">
+                    {{ current_balance|intcomma }} <small style="font-size: 16px; color: var(--text-sub);">TND</small>
+                </span>
+                <span class="metric-subtext">Revenue - All Expenses</span>
+            </div>
+        </div>
+
+        <div class="metric-card card-red">
+            <div>
+                <div class="metric-icon">⚠️</div>
+                <span class="metric-label">Unpaid Liabilities</span>
+                <span class="metric-value text-red">
+                    {{ unpaid_debt|intcomma }} <small style="font-size: 16px; opacity:0.8;">TND</small>
+                </span>
+                <span class="metric-subtext">Suppliers waiting for payment</span>
+            </div>
+            
+            {% if unpaid_debt > 0 %}
+            <div class="action-area">
+                <a href="/admin/core/booking/?supplier_payment_status__exact=unpaid" class="btn-action">
+                    Resolve Debts &rarr;
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div class="helper-box">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <span>💡</span> <strong>How this math works</strong>
+        </div>
+        <ul style="margin: 0; padding-left: 20px;">
+            <li><strong>Total Revenue:</strong> Strictly counts "Cash In" (Customer Payments) from the Ledger.</li>
+            <li><strong>Supplier Costs (Paid):</strong> Counts only money <em>allocated</em> to bookings via the "Safety Bridge" or paid Expenses.</li>
+            <li><strong>Unpaid Liabilities:</strong> This is the sum of all Supplier Costs on bookings + Unpaid Expenses.</li>
+            <li><em>To fix this number, go to Bookings or Expenses and use the "Pay via Ledger" action.</em></li>
+        </ul>
+    </div>
+
+</div>
+
+{% endblock %}

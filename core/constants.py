@@ -25,8 +25,37 @@ PAYMENT_STATUSES = [
     ("pending", "Pending Payment"),
     ("advance", "Partial / Advance"),
     ("paid", "Fully Paid"),
+    ("overpaid", "Overpaid (Credit)"),  # Edge case handling
     ("refunded", "Refunded"),
-    ("cancelled", "Cancelled (Void)"),
+]
+
+SUPPLIER_PAYMENT_STATUSES = [
+    ("unpaid", "🔴 Unpaid"),
+    ("partial", "🟠 Partially Paid"),
+    ("paid", "🟢 Paid"),
+]
+
+# Booking state
+BOOKING_STATUSES = [
+    ("quote", "📝 Quote"),  # Legacy support
+    ("draft", "🚧 Draft"),  # NEW: For invoices that shouldn't touch ledger
+    ("confirmed", "✅ Confirmed"),
+    ("cancelled", "🚫 Cancelled"),
+]
+
+# Ledger logic
+LEDGER_ENTRY_TYPES = [
+    ("sale_revenue", "Sale Revenue"),  # + Credit (Income)
+    ("customer_payment", "Customer Payment"),  # + Debit (Cash/Bank)
+    ("customer_refund", "Customer Refund"),  # - Credit (Cash/Bank)
+    ("supplier_cost", "Supplier Cost"),  # + Credit (Payable)
+    ("supplier_payment", "Supplier Payment"),  # + Debit (Payable)
+]
+
+# Payment types
+PAYMENT_TRANSACTION_TYPES = [
+    ("payment", "💰 Payment Received"),
+    ("refund", "💸 Refund Issued"),
 ]
 
 # Languages

@@ -4,96 +4,356 @@
     <meta charset="UTF-8">
     <title>Facture {{ booking.ref }}</title>
     <style>
-        @page { size: A4; margin: 2cm; }
-        body { font-family: 'Helvetica', sans-serif; color: #333; line-height: 1.5; font-size: 14px; }
-        .header { margin-bottom: 40px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
-        .logo h1 { margin: 0; color: #2c3e50; text-transform: uppercase; }
-        .company-info { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
-        
-        .invoice-details { display: table; width: 100%; margin-bottom: 30px; }
-        .box { display: table-cell; vertical-align: top; width: 50%; }
-        .client-box { background: #f9f9f9; padding: 15px; border-radius: 5px; }
-        
-        h3 { margin-top: 0; font-size: 16px; color: #2c3e50; }
-        
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background: #2c3e50; color: white; text-align: left; padding: 10px; font-weight: normal; }
-        td { padding: 10px; border-bottom: 1px solid #eee; }
-        .amount-col { text-align: right; }
-        
-        .totals { width: 40%; margin-left: auto; }
-        .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
-        .total-final { font-weight: bold; font-size: 16px; border-top: 2px solid #333; margin-top: 5px; padding-top: 5px; }
-        
-        .footer { position: fixed; bottom: 0; left: 0; right: 0; font-size: 10px; text-align: center; color: #aaa; }
-        
-        /* Status Badge */
-        .badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
-        .paid { color: green; border: 1px solid green; }
-        .partial { color: orange; border: 1px solid orange; }
-        .pending { color: red; border: 1px solid red; }
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        /* --- COLORS --- */
+        :root {
+            --primary-blue: #2C75AF;
+            --accent-gold: #F0B134;
+            --light-blue: #A9C1D7;
+            --bg-gray: #f8f9fa;
+        }
+
+        /* --- LAYOUT WRAPPER --- */
+        .page-container {
+            padding: 40px;
+        }
+
+        /* --- HEADER --- */
+        .header {
+            width: 100%;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #F0B134; /* Gold Border */
+            padding-bottom: 20px;
+        }
+        .header-table {
+            width: 100%;
+        }
+        .logo-cell {
+            width: 60%;
+            vertical-align: top;
+        }
+        .logo-img {
+            max-width: 180px;
+            display: block;
+        }
+        .company-info-cell {
+            width: 40%;
+            text-align: right;
+            vertical-align: top;
+            font-size: 11px;
+            color: #555;
+        }
+        .company-name {
+            color: #2C75AF;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        /* --- INVOICE TITLE & INFO --- */
+        .invoice-title-row {
+            margin-bottom: 30px;
+        }
+        .invoice-title {
+            font-size: 28px;
+            font-weight: 300;
+            color: #2C75AF;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0;
+        }
+        .invoice-ref {
+            font-size: 14px;
+            color: #F0B134;
+            font-weight: bold;
+        }
+
+        /* --- TWO COLUMN BOXES --- */
+        .details-table {
+            width: 100%;
+            margin-bottom: 40px;
+            border-spacing: 0 10px; /* Gap between rows */
+        }
+        .details-box {
+            background-color: #fcfcfc;
+            border-left: 4px solid #A9C1D7;
+            padding: 15px;
+            vertical-align: top;
+            width: 48%;
+        }
+        .client-box {
+            background-color: #f0f6fb; /* Very light blue tint */
+            border-left: 4px solid #2C75AF;
+        }
+        .box-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #7f8c8d;
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: block;
+        }
+        .box-content {
+            font-size: 13px;
+            color: #2c3e50;
+        }
+        .box-content strong {
+            font-weight: 700;
+        }
+
+        /* --- STATUS BADGES --- */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        .status-paid { background: #d4edda; color: #155724; }
+        .status-partial { background: #fff3cd; color: #856404; }
+        .status-pending { background: #f8d7da; color: #721c24; }
+        .status-cancelled { background: #e2e3e5; color: #383d41; }
+
+        /* --- ITEM TABLE --- */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items-table th {
+            background-color: #2C75AF;
+            color: #fff;
+            text-align: left;
+            padding: 12px 15px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+        }
+        .items-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            color: #444;
+        }
+        .col-right { text-align: right; }
+        .row-striped { background-color: #fdfdfd; }
+
+        /* --- TOTALS SECTION --- */
+        .totals-container {
+            width: 100%;
+            margin-top: 20px;
+        }
+        .totals-table {
+            width: 45%;
+            margin-left: auto; /* Align right */
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 8px 0;
+            text-align: right;
+        }
+        .totals-label {
+            color: #777;
+            padding-right: 20px !important;
+        }
+        .totals-value {
+            font-weight: bold;
+            color: #333;
+        }
+        .grand-total-row td {
+            border-top: 2px solid #333;
+            padding-top: 15px;
+            padding-bottom: 10px;
+            font-size: 16px;
+        }
+        .balance-row td {
+            color: #F0B134; /* Accent Gold */
+            font-size: 15px;
+        }
+        .paid-row td {
+            color: #2C75AF; /* Brand Blue */
+        }
+        .refund-row td {
+            color: #d9534f;
+        }
+
+        /* --- FOOTER --- */
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #eee;
+            text-align: center;
+            padding-top: 15px;
+            font-size: 10px;
+            color: #999;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="logo">
-            <h1>Dima Voyages</h1>
-        </div>
-        <div class="company-info">
-            35 Rue d'Iran Tunis | Centre Lamti El Mourouj 1 | Centre X Menzah 9<br>
-            Tél: +216 29 145 151 | Email: dimavoyagestunisia@gmail.com
-        </div>
-    </div>
 
-    <div class="invoice-details">
-        <div class="box">
-            <h3>Facture de Services</h3>
-            <strong>N° Facture:</strong> {{ booking.ref }}<br>
-            <strong>Date:</strong> {{ booking.created_at|date:"d/m/Y" }}<br>
-            <strong>Statut:</strong> {{ booking.get_payment_status_display }}
+    <div class="page-container">
+        
+        <div class="header">
+            <table class="header-table">
+                <tr>
+                    <td class="logo-cell">
+                        <img src="file:///code/assets/dima_voyages.png" class="logo-img" alt="Dima Voyages">
+	            </td>
+                    <td class="company-info-cell">
+                        <div class="company-name">Dima Voyages</div>
+                        35 Rue d'Iran, Tunis<br>
+                        Centre Lamti El Mourouj 1<br>
+                        Centre X Menzah 9<br>
+                        <br>
+                        <strong>Tel:</strong> +216 29 145 151<br>
+                        <strong>Email:</strong> dimavoyagestunisia@gmail.com
+                    </td>
+                </tr>
+            </table>
         </div>
-        <div class="box client-box">
-            <h3>Facturé à:</h3>
-            <strong>{{ booking.client.name }}</strong><br>
-            Tél: {{ booking.client.phone }}<br>
-            Passeport: {{ booking.client.passport }}
-        </div>
-    </div>
 
-    <table>
-        <thead>
+        <div class="invoice-title-row">
+            <h1 class="invoice-title">Facture</h1>
+            <span class="invoice-ref">Réf: #{{ booking.ref }}</span>
+        </div>
+
+        <table class="details-table">
             <tr>
-                <th>Description du service</th>
-                <th>Type</th>
-                <th class="amount-col">Montant</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>{{ booking.description }}</td>
-                <td>{{ booking.get_booking_type_display }}</td>
-                <td class="amount-col">{{ booking.total_amount }} TND</td>
-            </tr>
-        </tbody>
-    </table>
+                <td class="details-box">
+                    <span class="box-title">Détails de la Facture</span>
+                    <div class="box-content">
+                        <strong>Date d'émission:</strong> {{ booking.created_at|date:"d/m/Y" }}<br>
+                        <strong>Échéance:</strong> À réception<br>
+                        <br>
+                        <span class="box-title" style="margin-top:5px; margin-bottom:2px;">Statut de Paiement</span>
+                        {% if booking.payment_status == 'paid' %}
+                            <span class="status-badge status-paid">Payé</span>
+                        {% elif booking.payment_status == 'advance' or booking.payment_status == 'partial' %}
+                            <span class="status-badge status-partial">Partiel / Avance</span>
+                        {% elif booking.payment_status == 'cancelled' %}
+                            <span class="status-badge status-cancelled">Annulé</span>
+                        {% elif booking.payment_status == 'refunded' %}
+                            <span class="status-badge status-cancelled">Remboursé</span>
+                        {% else %}
+                            <span class="status-badge status-pending">En Attente</span>
+                        {% endif %}
+                    </div>
+                </td>
+                
+                <td style="width: 4%;"></td>
 
-    <div class="totals">
-        <div class="totals-row">
-            <span>Total:</span>
-            <span>{{ booking.total_amount }} TND</span>
+                <td class="details-box client-box">
+                    <span class="box-title">Facturé à</span>
+                    <div class="box-content">
+                        <strong style="font-size: 14px;">{{ booking.client.name }}</strong><br>
+                        {% if booking.client.address %}
+                            {{ booking.client.address }}<br>
+                        {% endif %}
+                        <br>
+                        <strong>Tél:</strong> {{ booking.client.phone|default:"-" }}<br>
+                        <strong>Passeport:</strong> {{ booking.client.passport|default:"-" }}
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 50%;">Description / Service</th>
+                    <th style="width: 25%;">Type</th>
+                    <th class="col-right" style="width: 25%;">Montant (TND)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="row-striped">
+                    <td>
+                        <strong>{{ booking.description|default:"Réservation Voyage" }}</strong>
+                        <br>
+                        <small style="color:#777;">Réf Dossier: {{ booking.ref }}</small>
+                    </td>
+                    <td>
+                        {% if booking.booking_type == 'air_ticket' %} Billet d'avion
+                        {% elif booking.booking_type == 'hotel' %} Hôtel
+                        {% elif booking.booking_type == 'visa' %} Visa
+                        {% elif booking.booking_type == 'insurance' %} Assurance
+                        {% elif booking.booking_type == 'omra' %} Omra
+                        {% elif booking.booking_type == 'organized_trip' %} Voyage Organisé
+                        {% elif booking.booking_type == 'ferry' %} Bateau
+                        {% else %} {{ booking.get_booking_type_display }}
+                        {% endif %}
+                    </td>
+                    <td class="col-right">
+                        {{ booking.total_amount|floatformat:2 }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="totals-container">
+            <table class="totals-table">
+                <tr>
+                    <td class="totals-label">Sous-total</td>
+                    <td class="totals-value">{{ booking.total_amount|floatformat:2 }}</td>
+                </tr>
+                <tr class="grand-total-row">
+                    <td class="totals-label">Total TTC</td>
+                    <td class="totals-value">{{ booking.total_amount|floatformat:2 }} TND</td>
+                </tr>
+                
+                <tr><td colspan="2" style="height:10px;"></td></tr>
+
+                {% if invoice_refunds > 0 %}
+                <tr class="refund-row">
+                    <td class="totals-label">Moins Remboursements</td>
+                    <td class="totals-value">-{{ invoice_refunds|floatformat:2 }}</td>
+                </tr>
+                {% endif %}
+
+                <tr class="paid-row">
+                    <td class="totals-label">Montant Payé (Net)</td>
+                    <td class="totals-value">{{ invoice_net_paid|floatformat:2 }} TND</td>
+                </tr>
+
+                <tr class="balance-row">
+                    <td class="totals-label" style="border-top: 1px solid #eee; padding-top:10px;">
+                        {% if invoice_balance > 0 %}Reste à Payer{% else %}Solde{% endif %}
+                    </td>
+                    <td class="totals-value" style="border-top: 1px solid #eee; padding-top:10px;">
+                        {% if invoice_balance == 0 %}
+                            <span style="color:green;">✔ Payé</span>
+                        {% else %}
+                            {{ invoice_balance|floatformat:2 }} TND
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
         </div>
-        <div class="totals-row" style="color: green;">
-            <span>Montant payé:</span>
-            <span>{{ booking.paid_amount }} TND</span>
-        </div>
-        <div class="totals-row total-final" style="color: {% if booking.outstanding > 0 %}red{% else %}black{% endif %};">
-            <span>Solde dû:</span>
-            <span>{{ booking.outstanding }} TND</span>
-        </div>
+
     </div>
 
     <div class="footer">
-        Cette facture est générée automatiquement par le système Dima Voyages.
+        Dima Voyages - Agence de Voyages et de Tourisme<br>
+        Merci de votre confiance. Pour toute question, contactez-nous au +216 29 145 151.
     </div>
+
 </body>
 </html>

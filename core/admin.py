@@ -2,21 +2,25 @@
 import secrets
 import string
 from datetime import datetime
+from decimal import Decimal
 
 import requests
 from django.contrib import admin, messages
 from django.db import models  # Essential for the Filter
-from django.db.models import F, Sum, Value
+from django.db import transaction
+from django.db.models import DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 
 from .forms import BookingAdminForm, VisaInlineForm
-from .models import (AmadeusSettings, Announcement, Booking, Client, Expense,
-                     FlightTicket, KnowledgeBase, LedgerEntry, Payment,
-                     Supplier, User, VisaApplication, WhatsAppSettings)
+from .models import (AmadeusSettings, Announcement, Booking,
+                     BookingLedgerAllocation, Client, Expense, FlightTicket,
+                     KnowledgeBase, LedgerEntry, Payment, Supplier, User,
+                     VisaApplication, WhatsAppSettings)
 
 
 # --- CUSTOM FILTERS ---
@@ -28,15 +32,32 @@ class OutstandingFilter(admin.SimpleListFilter):
         return (("yes", "Has Outstanding Balance"), ("no", "Fully Paid"))
 
     def queryset(self, request, queryset):
+        # We annotate Payments and Refunds separately
         qs = queryset.annotate(
-            db_paid=Coalesce(
-                Sum("payments__amount"), Value(0), output_field=models.DecimalField()
-            )
+            total_pay=Coalesce(
+                Sum("payments__amount", filter=Q(payments__transaction_type="payment")),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(),
+            ),
+            total_ref=Coalesce(
+                Sum("payments__amount", filter=Q(payments__transaction_type="refund")),
+                Value(Decimal("0.00")),
+                output_field=DecimalField(),
+            ),
+        ).annotate(
+            # Net Paid = Payments - Refunds
+            net_paid=F("total_pay")
+            - F("total_ref")
         )
+
         if self.value() == "yes":
-            return qs.filter(total_amount__gt=F("db_paid"))
+            # If Total > Net Paid, they owe us money
+            return qs.filter(total_amount__gt=F("net_paid"))
+
         if self.value() == "no":
-            return qs.filter(total_amount__lte=F("db_paid"))
+            # If Total <= Net Paid, they are settled
+            return qs.filter(total_amount__lte=F("net_paid"))
+
         return queryset
 
 
@@ -93,6 +114,56 @@ class FlightTicketInline(admin.StackedInline):
     classes = ("collapse",)
 
 
+@admin.action(description="💰 Pay Supplier via Ledger (Regularization)")
+def pay_via_ledger(modeladmin, request, queryset):
+    # 1. Calculate total needed for selected bookings
+    total_to_pay = 0
+    bookings_to_pay = []
+
+    for booking in queryset:
+        if booking.supplier_payment_status == "paid":
+            continue  # Skip already paid ones
+
+        # Calculate how much is left to pay on this booking
+        paid_so_far = (
+            booking.supplier_allocations.aggregate(total=models.Sum("amount"))["total"]
+            or 0
+        )
+        remainder = booking.supplier_cost - paid_so_far
+
+        if remainder > 0:
+            total_to_pay += remainder
+            bookings_to_pay.append((booking, remainder))
+
+    if total_to_pay == 0:
+        messages.warning(request, "Selected bookings are already paid or have 0 cost.")
+        return
+
+    # 2. SAFE TRANSACTION: Create Ledger Entry AND Allocations together
+    with transaction.atomic():
+        # A. Create the Ledger Entry (One big payment)
+        ledger_entry = LedgerEntry.objects.create(
+            date=timezone.now(),
+            account=f"Bulk Payment for {len(bookings_to_pay)} bookings",
+            entry_type="supplier_payment",
+            debit=total_to_pay,
+            created_by=request.user,
+        )
+
+        # B. Create the Allocations (The Safety Bridge)
+        for booking, amount in bookings_to_pay:
+            BookingLedgerAllocation.objects.create(
+                ledger_entry=ledger_entry, booking=booking, amount=amount
+            )
+            # The .save() method on Allocation will automatically
+            # update the booking status to 'Paid'
+
+    messages.success(
+        request,
+        f"Successfully regularized {total_to_pay} TND for {len(bookings_to_pay)} bookings.",
+    )
+
+
 # --- 3. MAIN BOOKING ADMIN ---
 
 
@@ -105,13 +176,22 @@ class BookingAdmin(ModelAdmin):
         "ref",
         "client",
         "created_at",  # Using created_at instead of trip_date
+        "booking_type",
+        "supplier_payment_status",  # <--- NEW: The Status Dot
         "total_amount",
         "status_badge",
         "balance_display",
         "invoice_link",
     )
 
-    list_filter = (OutstandingFilter, "payment_status", "booking_type", "created_at")
+    list_filter = (
+        OutstandingFilter,
+        "payment_status",
+        "supplier_payment_status",
+        "booking_type",
+        "created_at",
+    )
+
     search_fields = ("ref", "client__name", "client__phone", "client__passport")
 
     readonly_fields = (
@@ -124,8 +204,13 @@ class BookingAdmin(ModelAdmin):
     )
 
     # --- Added Actions Here ---
-    actions = ["configure_whatsapp_send", "send_whatsapp_tn", "send_whatsapp_fr"]
-
+    actions = [
+        "configure_whatsapp_send",
+        "send_whatsapp_tn",
+        "send_whatsapp_fr",
+        "cancel_booking",
+        pay_via_ledger,
+    ]  # Added cancel_booking
     fieldsets = (
         (
             "✈️ Trip & Customer",
@@ -184,29 +269,88 @@ class BookingAdmin(ModelAdmin):
         amount = form.cleaned_data.get("transaction_amount")
         method = form.cleaned_data.get("transaction_method")
 
-        if action == "none":
+        if action == "none" or not amount:
             return
 
-        final_amount = 0
-        if action == "full":
-            paid_so_far = obj.payments.aggregate(Sum("amount"))["amount__sum"] or 0
-            final_amount = obj.total_amount - paid_so_far
-        elif action == "partial":
-            final_amount = amount
-        elif action == "refund":
-            final_amount = -abs(amount)
-
-        if final_amount != 0:
+        # 1. ADD PAYMENT
+        if action == "payment":
             Payment.objects.create(
                 booking=obj,
-                amount=final_amount,
+                amount=amount,
                 method=method,
+                transaction_type="payment",
                 date=datetime.now().date(),
-                reference=f"AUTO-{action.upper()}",
+                reference="MANUAL-ENTRY",
+                created_by=request.user,
             )
-            self.message_user(
-                request, f"✅ Processed {action.upper()}: {final_amount} TND"
+            self.message_user(request, f"✅ Payment of {amount} Recorded.")
+
+        # 2. ISSUE REFUND
+        elif action == "refund":
+            Payment.objects.create(
+                booking=obj,
+                amount=amount,  # Store positive number, logic handles the rest
+                method=method,
+                transaction_type="refund",
+                date=datetime.now().date(),
+                reference="MANUAL-REFUND",
+                created_by=request.user,
             )
+            self.message_user(request, f"💸 Refund of {amount} Issued.")
+
+        # 3. SUPPLIER PAYMENT (Does not affect Customer Status)
+        elif action == "supplier_payment":
+            # Just a ledger entry, no Payment object linked to customer balance
+            LedgerEntry.objects.create(
+                date=datetime.now().date(),
+                account=f"Supplier Pay - {obj.ref}",
+                entry_type="supplier_payment",
+                debit=amount,
+                credit=0,
+                booking=obj,
+                created_by=request.user,
+            )
+            self.message_user(request, f"📤 Supplier Payment of {amount} Recorded.")
+
+    # --- NEW ACTION: CANCEL BOOKING ---
+    @admin.action(description="🚫 Cancel Booking (Full Refund)")
+    def cancel_booking(self, request, queryset):
+        for booking in queryset:
+            with transaction.atomic():
+                # 1. Calculate what was paid
+                paid = (
+                    booking.payments.filter(transaction_type="payment").aggregate(
+                        Sum("amount")
+                    )["amount__sum"]
+                    or 0
+                )
+                refunded = (
+                    booking.payments.filter(transaction_type="refund").aggregate(
+                        Sum("amount")
+                    )["amount__sum"]
+                    or 0
+                )
+                net_balance = paid - refunded
+
+                # 2. Issue Refund if money exists
+                if net_balance > 0:
+                    Payment.objects.create(
+                        booking=booking,
+                        amount=net_balance,
+                        transaction_type="refund",
+                        date=datetime.now().date(),
+                        method="CASH",  # Default to Cash for safety
+                        reference="AUTO-CANCEL-REFUND",
+                        created_by=request.user,
+                    )
+
+                # 3. Update Status
+                booking.status = "cancelled"
+                booking.save()
+
+        self.message_user(
+            request, f"✅ {queryset.count()} booking(s) cancelled and refunded."
+        )
 
     # --- NEW ACTION LOGIC ---
 
@@ -297,26 +441,66 @@ class BookingAdmin(ModelAdmin):
 
     # --- UI Helpers ---
     def status_badge(self, obj):
+        # Calculate Refunds to see if we need to show the tag
+        refunds = obj.payments.filter(transaction_type="refund").aggregate(
+            total=Coalesce(Sum("amount"), Value(Decimal("0.00")))
+        )["total"]
+
+        # SCENARIO A: BOOKING IS CANCELLED
+        if obj.status == "cancelled":
+            if refunds > 0:
+                return format_html(
+                    '<span style="color:#888; font-weight:bold;">🚫 Cancelled</span><br>'
+                    '<span style="font-size:10px; color:#28a745;">(Full Refund)</span>'
+                )
+            return format_html(
+                '<span style="color:#888; font-weight:bold;">🚫 Cancelled</span>'
+            )
+
         colors = {
-            "PAID": "green",
-            "PARTIAL": "orange",
-            "PENDING": "red",
-            "REFUNDED": "gray",
+            "paid": "green",
+            "advance": "orange",
+            "pending": "red",
+            "refunded": "gray",
         }
         color = colors.get(obj.payment_status, "gray")
-        label = obj.get_payment_status_display() if obj.payment_status else "Unknown"
-        return format_html(
+        label = obj.get_payment_status_display() or "Unknown"
+
+        # Standard Dot
+        main_badge = format_html(
             f'<span style="color:{color}; font-weight:bold;">● {label}</span>'
         )
+
+        # Append Refund Tag if money was returned
+        if refunds > 0:
+            return format_html(
+                f"{main_badge}<br>"
+                f'<span style="font-size:10px; color:#e0a800;">↩️ Refunded</span>'
+            )
+
+        return main_badge
 
     status_badge.short_description = "Status"
 
     def balance_display(self, obj):
         if not obj.pk:
             return "-"
-        paid = obj.payments.aggregate(Sum("amount"))["amount__sum"] or 0
-        balance = obj.total_amount - paid
 
+        # 1. Calculate Payments & Refunds
+        payments = obj.payments.filter(transaction_type="payment").aggregate(
+            total=Coalesce(Sum("amount"), Value(Decimal("0.00")))
+        )["total"]
+
+        refunds = obj.payments.filter(transaction_type="refund").aggregate(
+            total=Coalesce(Sum("amount"), Value(Decimal("0.00")))
+        )["total"]
+
+        # 2. Net Math: Balance = Total - (Paid - Refunded)
+        # We keep the logic you requested: Refunds increase the Due Balance.
+        net_paid = payments - refunds
+        balance = obj.total_amount - net_paid
+
+        # 3. Display Logic (Just Numbers)
         if balance > 0:
             return format_html(f'<b style="color:#d9534f;">{balance:,.2f} TND Due</b>')
         elif balance == 0:
@@ -338,6 +522,32 @@ class BookingAdmin(ModelAdmin):
 
     invoice_link.short_description = "Invoice"
 
+    def get_readonly_fields(self, request, obj=None):
+        """
+        Dynamic Read-Only Logic:
+        If the booking is CANCELLED, make ALL fields read-only (Grayed out).
+        Otherwise, use the standard read-only fields.
+        """
+        # 1. Get standard read-only fields defined in the class
+        standard_readonly = list(super().get_readonly_fields(request, obj))
+
+        # 2. Check if object exists and is cancelled
+        if obj and obj.status == "cancelled":
+            # Get ALL field names in the model
+            all_fields = [f.name for f in self.model._meta.fields]
+            # Also add any non-model readonly fields you display (like balance_display)
+            custom_fields = [
+                "balance_display",
+                "invoice_link",
+                "send_whatsapp_link",
+                "status_badge",
+                "supplier_payment_status",
+            ]
+            return all_fields + custom_fields
+
+        # 3. If not cancelled, return normal list
+        return standard_readonly
+
 
 # --- 4. OTHER ADMINS ---
 
@@ -352,13 +562,151 @@ class PaymentAuditAdmin(ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return False
+        # If it's cancelled, you can LOOK (view), but you cannot CHANGE (save).
+        if obj and obj.status == "cancelled":
+            return False
+        return super().has_change_permission(request, obj)
+
+
+@admin.action(description="💰 Pay Expenses via Ledger")
+def pay_expenses_via_ledger(modeladmin, request, queryset):
+    """
+    Creates a single Ledger Expense entry for selected Expenses
+    and marks them as paid.
+    Uses entry_type='expense' so it counts towards Supplier Costs/Consolidation.
+    """
+    # 1. Filter only unpaid expenses
+    unpaid_expenses = queryset.filter(paid=False)
+
+    if not unpaid_expenses.exists():
+        messages.warning(request, "⚠️ No unpaid expenses selected.")
+        return
+
+    # 2. Calculate Total Safe Sum
+    total_to_pay = unpaid_expenses.aggregate(
+        total=Coalesce(
+            Sum("amount"), Value(Decimal("0.00")), output_field=DecimalField()
+        )
+    )["total"]
+
+    if total_to_pay <= 0:
+        messages.warning(request, "⚠️ Total amount is 0.")
+        return
+
+    # 3. Create Ledger Entry & Update Status
+    try:
+        with transaction.atomic():
+            # A. Create Ledger Entry (Money Out)
+            LedgerEntry.objects.create(
+                date=timezone.now(),
+                account=f"Expense Payment ({unpaid_expenses.count()} items)",
+                # CRITICAL: 'expense' type ensures it is calculated in Supplier Costs
+                entry_type="expense",
+                debit=total_to_pay,
+                credit=0,
+                created_by=request.user,
+                is_consolidated=False,
+            )
+
+            # B. Mark Expenses as Paid
+            rows_updated = unpaid_expenses.update(paid=True)
+
+        messages.success(
+            request,
+            f"✅ Paid {total_to_pay} TND for {rows_updated} expenses via Ledger.",
+        )
+
+    except Exception as e:
+        messages.error(request, f"❌ Error: {str(e)}")
 
 
 @admin.register(Expense)
 class ExpenseAdmin(ModelAdmin):
     list_display = ("name", "amount", "due_date", "paid", "supplier")
     list_filter = ("paid", "due_date")
+
+    actions = [pay_expenses_via_ledger]
+
+
+@admin.action(description="📈 Consolidate as Revenue (Close Day)")
+def consolidate_daily_revenue(modeladmin, request, queryset):
+    """
+    Calculates GROSS Revenue (Client Cash In - Client Refunds) from selected rows.
+
+    CRITICAL CHANGE: Does NOT subtract Supplier Costs from the Revenue figure.
+    This ensures Profit = (Gross Revenue - Supplier Costs) works correctly in the view.
+
+    Locking: Marks ALL selected rows (Clients + Suppliers) as consolidated
+    so they cannot be processed again.
+    """
+    # 1. Define Category Filters
+    client_in_types = ["customer_payment", "payment", "income"]
+    client_out_types = ["customer_refund", "refund"]
+
+    # We define supplier types only to lock them, not to calc revenue
+    supplier_types = ["supplier_payment", "expense", "supplier_cost"]
+
+    all_valid_types = client_in_types + client_out_types + supplier_types
+
+    # 2. Filter: Only Valid Types AND Not Yet Consolidated
+    valid_entries = queryset.filter(
+        entry_type__in=all_valid_types, is_consolidated=False
+    )
+
+    if not valid_entries.exists():
+        messages.warning(request, "⚠️ No valid, unconsolidated rows selected.")
+        return
+
+    # 3. Helper for Safe Summing
+    def get_sum(qs, field):
+        return qs.aggregate(
+            total=Coalesce(
+                Sum(field), Value(Decimal("0.00")), output_field=DecimalField()
+            )
+        )["total"]
+
+    # 4. Calculate Components (CLIENT SIDE ONLY)
+
+    # A. Client Money
+    client_in = get_sum(valid_entries.filter(entry_type__in=client_in_types), "debit")
+    client_out = get_sum(
+        valid_entries.filter(entry_type__in=client_out_types), "credit"
+    )
+
+    # 5. Gross Net Calculation
+    # Formula: (Client Payments) - (Client Refunds)
+    # We DO NOT subtract Supplier Costs here, because they exist as separate Debit entries
+    # in the ledger and will be subtracted in the Profit calculation automatically.
+    gross_revenue = client_in - client_out
+
+    # 6. Create the Revenue Entry
+    # We use the date of the most recent transaction
+    closing_date = valid_entries.latest("date").date
+
+    try:
+        with transaction.atomic():
+            # Create Revenue Entry (Credit Side)
+            LedgerEntry.objects.create(
+                date=closing_date,
+                account=f"Daily Revenue Closing ({valid_entries.count()} txns)",
+                entry_type="sale_revenue",
+                debit=0,
+                credit=gross_revenue,
+                created_by=request.user,
+                is_consolidated=True,
+            )
+
+            # 7. MARK ROWS AS CONSOLIDATED (The Lock)
+            # We lock EVERYTHING selected (including expenses) so they are part of this "Closing"
+            valid_entries.update(is_consolidated=True)
+
+        messages.success(
+            request,
+            f"✅ Daily Gross Revenue of {gross_revenue} TND recognized. {valid_entries.count()} entries locked (Expenses included).",
+        )
+
+    except Exception as e:
+        messages.error(request, f"❌ Error during consolidation: {str(e)}")
 
 
 @admin.register(LedgerEntry)
@@ -367,12 +715,29 @@ class LedgerEntryAdmin(ModelAdmin):
     list_display = (
         "date",
         "formatted_account",
+        "entry_type",
         "formatted_debit",
         "formatted_credit",
+        "consolidation_status",
         "booking",
     )
-    list_filter = ("date", "account")
+    list_filter = ("date", "entry_type", "is_consolidated", "account")
     date_hierarchy = "date"
+
+    def consolidation_status(self, obj):
+        if obj.is_consolidated:
+            # Gray Lock for processed items
+            return format_html(
+                '<span style="color: #9ca3af; font-weight:bold; display:flex; align-items:center; gap:5px;">'
+                "🔒 Consolidated"
+                "</span>"
+            )
+        # Green Dot for items ready to be processed
+        return format_html(
+            '<span style="color: #10b981; font-weight:bold;">● Open</span>'
+        )
+
+    consolidation_status.short_description = "Status"
 
     def formatted_account(self, obj):
         if obj.account.startswith("Revenue"):
@@ -404,28 +769,72 @@ class LedgerEntryAdmin(ModelAdmin):
         )
 
     formatted_credit.short_description = "Credit"
+    actions = [consolidate_daily_revenue]
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context)
-        if hasattr(response, "context_data") and "cl" in response.context_data:
+
+        try:
             qs = response.context_data["cl"].queryset
-            revenue = (
-                qs.filter(account__startswith="Revenue").aggregate(total=Sum("credit"))[
-                    "total"
-                ]
-                or 0
-            )
-            expense = (
-                qs.filter(account__startswith="Expense").aggregate(total=Sum("debit"))[
-                    "total"
-                ]
-                or 0
-            )
-            response.context_data["summary"] = {
-                "revenue": revenue,
-                "expense": expense,
-                "profit": revenue - expense,
-            }
+        except (AttributeError, KeyError):
+            return response
+
+        # --- HELPER ---
+        def get_sum(queryset, field):
+            return queryset.aggregate(
+                total=Coalesce(
+                    Sum(field), Value(Decimal("0.00")), output_field=DecimalField()
+                )
+            )["total"]
+
+        # --- 1. TOTAL REVENUE ---
+        # Sum of all Sale Revenue entries (These are usually Consolidated items)
+        revenue_qs = qs.filter(entry_type="sale_revenue")
+        total_revenue = get_sum(revenue_qs, "credit")
+
+        # --- 2. CASH COLLECTED (Client Side Only) ---
+        # A. Client Money IN (Debit)
+        client_in_qs = qs.filter(
+            entry_type__in=["customer_payment", "payment", "income"]
+        )
+        client_cash_in = get_sum(client_in_qs, "debit")
+
+        # B. Client Money OUT (Credit)
+        client_out_qs = qs.filter(entry_type__in=["customer_refund", "refund"])
+        client_refunds = get_sum(client_out_qs, "credit")
+
+        # RESULT: "Cash Collected" = Client In - Client Out
+        # This ignores supplier costs, keeping your 900.00 TND figure intact.
+        cash_collected = client_cash_in - client_refunds
+
+        # --- 3. SUPPLIER COST (Net) ---
+        # Filters: entry_type="supplier_payment", "expense"
+        supplier_qs = qs.filter(
+            entry_type__in=["supplier_payment", "expense", "supplier_cost"]
+        )
+
+        # A. Money Out to Supplier (Debit)
+        supplier_paid = get_sum(supplier_qs, "debit")
+
+        # B. Money Back from Supplier (Credit)
+        supplier_refunded = get_sum(supplier_qs, "credit")
+
+        # RESULT: Net Supplier Cost (Paid - Refunded)
+        # This ensures 2450 - 1000 = 1450.00 TND
+        net_supplier_cost = supplier_paid - supplier_refunded
+
+        # --- 4. PROFIT ---
+        # Invoiced Revenue - Net Supplier Costs
+        profit = total_revenue - net_supplier_cost
+
+        # --- PASS TO TEMPLATE ---
+        response.context_data["summary"] = {
+            "revenue": total_revenue,
+            "expense": net_supplier_cost,  # Shows Net Cost (1450.00)
+            "profit": profit,
+            "net_cash": cash_collected,  # Shows Client Cash Only (900.00)
+        }
+
         return response
 
     def has_delete_permission(self, request, obj=None):
