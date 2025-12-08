@@ -28,7 +28,7 @@
         console.log("✅ Amadeus Search: jQuery UI loaded successfully.");
 
         // 2. Initialize
-        var $field = $('#id_description'); 
+        const $field = $('#id_description'); 
         if ($field.length) {
             $field.autocomplete({
                 source: "/api/airport-autocomplete/",

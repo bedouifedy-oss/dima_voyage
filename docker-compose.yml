@@ -9,7 +9,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - db_data:/var/lib/postgresql/data
-    # Ports removed for security
 
   web:
     build: .
@@ -38,7 +37,6 @@ services:
     depends_on:
       - db
 
-  # --- NEW SERVICES START HERE ---
   nginx:
     image: nginx:latest
     ports:
@@ -58,11 +56,25 @@ services:
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
-  # --- NEW SERVICES END HERE ---
 
+  # --- SONARQUBE (Now correctly inside services) ---
+  sonarqube:
+    image: sonarqube:community
+    ports:
+      - "9000:9000"
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+      - sonar_logs:/opt/sonarqube/logs
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+
+# --- SINGLE VOLUMES BLOCK (Merged everything here) ---
 volumes:
   db_data:
   media_volume:
-  # Add these new volumes:
   certbot-conf:
   certbot-www:
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:

@@ -38,11 +38,11 @@
 
                             <div class="row">
                                 <div class="col-12 mb-3">
-                                    <label class="form-label">تصويرة الباسبور / Photo <span class="text-danger">*</span></label>
+                                    <label class="form-label" for="{{ form.photo.id_for_label }}">تصويرة الباسبور / Photo <span class="text-danger">*</span></label>
                                     {{ form.photo }}
                                 </div>
                                 <div class="col-12 mb-3">
-                                    <label class="form-label">رقم الباسبور / Passport N° <span class="text-danger">*</span></label>
+                                    <label class="form-label" for="{{ form.passport_number.id_for_label }}">رقم الباسبور / Passport N° <span class="text-danger">*</span></label>
                                     {{ form.passport_number }}
                                 </div>
                             </div>
@@ -51,7 +51,7 @@
                                 {% for field in form %}
                                     {% if field.name != 'photo' and field.name != 'passport_number' %}
                                         <div class="col-md-6 mb-3">
-                                            <label class="form-label">{{ field.label }}</label>
+                                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                             {{ field }}
                                         </div>
                                     {% endif %}

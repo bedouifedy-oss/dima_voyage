@@ -7,10 +7,9 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        import core.signals
+        import core.signals  # noqa
 
         # Implicitly connect signal handlers decorated with @receiver
-        pass
 
 
 INSTALLED_APPS = [

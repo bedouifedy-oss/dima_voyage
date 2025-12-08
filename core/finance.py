@@ -49,9 +49,9 @@ class FinanceStats:
         qs = LedgerEntry.objects.filter(
             entry_type__in=["supplier_payment", "expense", "supplier_cost"]
         )
-        debits = FinanceStats._safe_sum(qs, "debit")
-        credits = FinanceStats._safe_sum(qs, "credit")
-        return debits - credits
+        total_debits = FinanceStats._safe_sum(qs, "debit")
+        total_credits = FinanceStats._safe_sum(qs, "credit")
+        return total_debits - total_credits
 
     # --- 3. ACCOUNT BALANCE (White Card) ---
     @staticmethod
