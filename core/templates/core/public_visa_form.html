@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tn" dir="rtl">
+<html lang="{{ request.GET.lang|default:'tn' }}" dir="{% if request.GET.lang == 'fr' %}ltr{% else %}rtl{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,11 +8,36 @@
     <style>
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 15px; }
-        .header-bg { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 2rem; border-radius: 15px 15px 0 0; }
+        .header-bg { 
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
+            color: white; 
+            padding: 2rem; 
+            border-radius: 15px 15px 0 0; 
+            position: relative; /* Needed for the floating buttons */
+        }
         .btn-primary { background-color: #2a5298; border: none; padding: 10px 30px; }
         .form-label { font-weight: 600; color: #34495e; margin-top: 10px; }
-        /* LTR Support for English fields if needed */
-        .ltr-input input, .ltr-input textarea { direction: ltr; text-align: left; }
+        
+        /* Floating Language Switcher Style */
+        .lang-switcher {
+            position: absolute;
+            top: 20px;
+            /* Force Right alignment regardless of RTL/LTR direction */
+            right: 20px; 
+            direction: ltr;
+        }
+        
+        .btn-glass {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            backdrop-filter: blur(5px);
+        }
+        .btn-glass:hover, .btn-glass.active {
+            background: rgba(255, 255, 255, 0.9);
+            color: #1e3c72;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -21,17 +46,27 @@
             <div class="col-md-8">
                 <div class="card">
                     <div class="header-bg text-center">
+                        
+                        <div class="lang-switcher btn-group btn-group-sm">
+                            <a href="?lang=tn" class="btn btn-glass {% if request.GET.lang == 'tn' or not request.GET.lang %}active{% endif %}">
+                                🇹🇳 تونسي
+                            </a>
+                            <a href="?lang=fr" class="btn btn-glass {% if request.GET.lang == 'fr' %}active{% endif %}">
+                                🇫🇷 Français
+                            </a>
+                        </div>
                         <h3>📋 Visa Application</h3>
                         <p class="mb-0">Booking Ref: <strong>{{ booking.ref }}</strong></p>
                         <p>{{ booking.client.name }}</p>
                     </div>
+
                     <div class="card-body p-4">
                         <form method="post" enctype="multipart/form-data">
                             {% csrf_token %}
                             
                             {% if form.errors %}
                                 <div class="alert alert-danger">
-                                    <strong>Please fix the errors below:</strong>
+                                    <strong>Please fix the errors below / يرجى إصلاح الأخطاء أدناه:</strong>
                                     {{ form.errors }}
                                 </div>
                             {% endif %}

@@ -8,7 +8,7 @@
     <style>
         body { background-color: #f8f9fa; font-family: 'Segoe UI', sans-serif; }
         .card { border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 15px; }
-        .header-bg { background: linear-gradient(135deg, #0052cc 0%, #0066ff 100%); color: white; padding: 2rem; border-radius: 15px 15px 0 0; }
+        .header-bg { background: linear-gradient(135deg, #0052cc 0%, #0066ff 100%); color: white; padding: 2rem; border-radius: 15px 15px 0 0; position: relative; }
         .btn-primary { background-color: #0052cc; border: none; padding: 10px 30px; }
         .form-label { font-weight: 600; color: #34495e; margin-top: 10px; }
     </style>
@@ -19,6 +19,16 @@
             <div class="col-md-8">
                 <div class="card">
                     <div class="header-bg text-center">
+                    <div style="position: absolute; top: 20px; right: 20px;">
+			<div class="btn-group btn-group-sm" role="group">
+      			     <a href="?lang=tn" class="btn btn-outline-light border-0" style="opacity: 0.7;">
+                                  🇹🇳 تونسي
+                             </a>
+			     <a href="?lang=fr" class="btn btn-light fw-bold active border-0" style="opacity: 1;">
+		 	  	  🇫🇷 Français
+		             </a>
+			</div>
+		    </div>
                         <h3>📋 Formulaire de Visa</h3>
                         <p class="mb-0">Réf: <strong>{{ booking.ref }}</strong></p>
                         <p>{{ booking.client.name }}</p>

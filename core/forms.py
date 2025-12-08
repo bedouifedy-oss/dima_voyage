@@ -92,6 +92,31 @@ class VisaFieldConfigurationForm(forms.Form):
 
 
 class BookingAdminForm(forms.ModelForm):
+    visa_form_config = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        choices=[
+            ("full_name", "Full Name (Auto-Included)"),
+            ("dob", "Date of Birth"),
+            ("nationality", "Nationality"),
+            ("passport_issue_date", "Passport Issue Date"),
+            ("passport_expiry_date", "Passport Expiry Date"),
+            ("has_previous_visa", "Previous Visa History"),
+            ("travel_reason", "Reason for Travel"),
+            ("departure_date", "Departure Date"),
+            ("return_date", "Return Date"),
+            ("ticket_departure", "Flight Ticket (Departure)"),
+            ("ticket_return", "Flight Ticket (Return)"),
+            ("travel_insurance", "Travel Insurance"),
+            ("hotel_reservation", "Hotel Reservation"),
+            ("financial_proofs", "Bank Statement / Proofs"),
+            ("emergency_contact", "Emergency Contact"),
+            ("consent_data", "Data Consent (Auto-Included)"),
+        ],
+        label="Public Form Fields",
+        help_text="Select the fields you want the client to fill out.",
+    )
+
     # --- COMMAND CENTER FIELDS (Ghost Fields) ---
     ACTION_CHOICES = [
         ("none", "--- Select Action ---"),
@@ -115,6 +140,7 @@ class BookingAdminForm(forms.ModelForm):
     class Meta:
         model = Booking
         fields = "__all__"
+        exclude = ["created_at", "updated_at", "created_by"]
         widgets = {
             "visa_form_config": forms.CheckboxSelectMultiple(
                 choices=[

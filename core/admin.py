@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin
+from unfold.contrib.filters.admin import RangeDateFilter
 
 from .forms import BookingAdminForm, VisaInlineForm
 from .models import (AmadeusSettings, Announcement, Booking,
@@ -189,7 +190,7 @@ class BookingAdmin(ModelAdmin):
         "payment_status",
         "supplier_payment_status",
         "booking_type",
-        "created_at",
+        ("created_at", RangeDateFilter),
     )
 
     search_fields = ("ref", "client__name", "client__phone", "client__passport")
@@ -200,6 +201,7 @@ class BookingAdmin(ModelAdmin):
         "created_at",
         "balance_display",
         "invoice_link",
+        "visa_link_copy",
         "send_whatsapp_link",
     )
 
@@ -221,6 +223,14 @@ class BookingAdmin(ModelAdmin):
                     "booking_type",
                     "description",
                 )
+            },
+        ),
+        (
+            "🌍 Visa Application (Public Link)",
+            {
+                "fields": ("visa_link_copy", "visa_form_config"),
+                "description": "Copy this link to send the form manually via WhatsApp/SMS.",
+                "classes": ("collapse",),  # Optional: keeps it tidy if not always used
             },
         ),
         (
@@ -311,6 +321,38 @@ class BookingAdmin(ModelAdmin):
                 created_by=request.user,
             )
             self.message_user(request, f"📤 Supplier Payment of {amount} Recorded.")
+
+    def visa_link_copy(self, obj):
+        if not obj.pk:
+            return "-"
+
+        try:
+            url = reverse("public_visa_form", args=[obj.ref])
+            full_url = f"{self.request.scheme}://{self.request.get_host()}{url}"
+        except Exception:
+            full_url = "URL Not Configured"
+
+        return format_html(
+            """
+            <div class="flex items-center gap-2">
+                <input type="text" value="{url}" id="visa_link_{id}" readonly 
+                       class="vTextField" style="width: 350px;">
+                <button type="button" class="button" 
+                        style="background-color: #4f46e5; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer;"
+                        onclick="navigator.clipboard.writeText(document.getElementById('visa_link_{id}').value).then(function(){{alert('✅ Copied!');}});">
+                    📋 Copy
+                </button>
+                <a href="{url}" target="_blank" class="button" style="margin-left:5px; text-decoration:none;">
+                    Open ↗
+                </a>
+            </div>
+            """,
+            url=full_url,
+            id=obj.pk,
+        )
+
+    visa_link_copy.short_description = "Manual Link"
+    visa_link_copy.allow_tags = True
 
     # --- NEW ACTION: CANCEL BOOKING ---
     @admin.action(description="🚫 Cancel Booking (Full Refund)")
@@ -542,6 +584,7 @@ class BookingAdmin(ModelAdmin):
                 "send_whatsapp_link",
                 "status_badge",
                 "supplier_payment_status",
+                "visa_link_copy",
             ]
             return all_fields + custom_fields
 
@@ -721,7 +764,12 @@ class LedgerEntryAdmin(ModelAdmin):
         "consolidation_status",
         "booking",
     )
-    list_filter = ("date", "entry_type", "is_consolidated", "account")
+    list_filter = (
+        ("date", RangeDateFilter),
+        "entry_type",
+        "is_consolidated",
+        "account",
+    )
     date_hierarchy = "date"
 
     def consolidation_status(self, obj):
