@@ -19,55 +19,64 @@ class FinanceStats:
 
     # --- 1. TOTAL REVENUE (Green Card) ---
     @staticmethod
-    def get_gross_client_cash_in():
+    def get_gross_client_cash_in(start_date=None, end_date=None):
         """
         RAW CASH IN: Sum of all money received from clients.
         Source: LedgerEntry (Debit) where type='customer_payment'.
         """
-        return FinanceStats._safe_sum(
-            LedgerEntry.objects.filter(
-                entry_type__in=["customer_payment", "payment", "income"]
-            ),
-            "debit",
+        qs = LedgerEntry.objects.filter(
+            entry_type__in=["customer_payment", "payment", "income"]
         )
+
+        # Apply Date Filter if provided
+        if start_date and end_date:
+            qs = qs.filter(date__range=[start_date, end_date])
+
+        return FinanceStats._safe_sum(qs, "debit")
 
     # --- Helper for Refunds ---
     @staticmethod
-    def get_client_refunds():
+    def get_client_refunds(start_date=None, end_date=None):
         """Money returned to clients."""
-        return FinanceStats._safe_sum(
-            LedgerEntry.objects.filter(entry_type__in=["customer_refund", "refund"]),
-            "credit",
-        )
+        qs = LedgerEntry.objects.filter(entry_type__in=["customer_refund", "refund"])
+
+        if start_date and end_date:
+            qs = qs.filter(date__range=[start_date, end_date])
+
+        return FinanceStats._safe_sum(qs, "credit")
 
     # --- 2. SUPPLIER COSTS (Red Card) ---
     @staticmethod
-    def get_net_supplier_cost_paid():
+    def get_net_supplier_cost_paid(start_date=None, end_date=None):
         """
         Net Supplier Cost = (Money Paid Out) - (Money Returned/Credit)
         """
         qs = LedgerEntry.objects.filter(
             entry_type__in=["supplier_payment", "expense", "supplier_cost"]
         )
+
+        if start_date and end_date:
+            qs = qs.filter(date__range=[start_date, end_date])
+
         total_debits = FinanceStats._safe_sum(qs, "debit")
         total_credits = FinanceStats._safe_sum(qs, "credit")
         return total_debits - total_credits
 
     # --- 3. ACCOUNT BALANCE (White Card) ---
     @staticmethod
-    def get_net_cash_balance():
+    def get_net_cash_balance(start_date=None, end_date=None):
         """
         Strict Formula: (Total Revenue Cash) - (Refunds) - (Supplier Costs)
         This ensures it is mathematically identical to the other cards.
         """
         # A. Get the exact number shown in the Green Card
-        total_revenue_cash = FinanceStats.get_gross_client_cash_in()
+        total_revenue_cash = FinanceStats.get_gross_client_cash_in(start_date, end_date)
 
         # B. Get Refunds
-        refunds = FinanceStats.get_client_refunds()
+        refunds = FinanceStats.get_client_refunds(start_date, end_date)
 
         # C. Get the exact number shown in the Red Card
-        supplier_costs = FinanceStats.get_net_supplier_cost_paid()
+        supplier_costs = FinanceStats.get_net_supplier_cost_paid(start_date, end_date)
 
         # Calculation
         return total_revenue_cash - refunds - supplier_costs

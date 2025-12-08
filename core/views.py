@@ -1,4 +1,5 @@
 # core/views.py
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import weasyprint
@@ -10,6 +11,7 @@ from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from .finance import FinanceStats
 from .forms import VisaFieldConfigurationForm, VisaForm
@@ -23,26 +25,64 @@ def financial_dashboard(request):
     # 1. Get Admin Context
     context = admin.site.each_context(request)
 
-    # 2. Fetch Raw Numbers
-    # CHANGE: We now use 'get_gross_client_cash_in' for the Revenue Card
-    raw_cash_in = FinanceStats.get_gross_client_cash_in()
+    # 2. Date Filtering Logic
+    today = timezone.now().date()
+    start_of_month = today.replace(day=1)
 
-    supplier_costs = FinanceStats.get_net_supplier_cost_paid()
-    balance = FinanceStats.get_net_cash_balance()
+    # Get parameters from URL (Default to 'this_month')
+    period = request.GET.get("period", "this_month")
+    date_from_str = request.GET.get("date_from")
+    date_to_str = request.GET.get("date_to")
+
+    # Calculate Range
+    if period == "today":
+        date_from = today
+        date_to = today
+    elif period == "yesterday":
+        date_from = today - timedelta(days=1)
+        date_to = date_from
+    elif period == "this_week":
+        date_from = today - timedelta(days=today.weekday())  # Monday
+        date_to = today
+    elif period == "this_month":
+        date_from = start_of_month
+        date_to = today
+    elif period == "last_month":
+        last_month_end = start_of_month - timedelta(days=1)
+        date_from = last_month_end.replace(day=1)
+        date_to = last_month_end
+    elif period == "custom" and date_from_str and date_to_str:
+        try:
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
+        except ValueError:
+            date_from, date_to = start_of_month, today
+    else:
+        date_from, date_to = start_of_month, today
+
+    # 3. Fetch Raw Numbers (Passing Dates to FinanceStats)
+    # We pass the calculated dates to your helper class
+    raw_cash_in = FinanceStats.get_gross_client_cash_in(date_from, date_to)
+    supplier_costs = FinanceStats.get_net_supplier_cost_paid(date_from, date_to)
+
+    # Unpaid Debt is a snapshot (Total owed right now), so we usually don't filter it by date
     unpaid_debt = FinanceStats.get_unpaid_liabilities()
 
-    # 3. Profit (Optional calculation for context)
-    # If you want Profit to be (Cash In - Costs), use this:
+    # Profit Calculation for this period
     cash_profit = raw_cash_in - supplier_costs
 
     context.update(
         {
             "title": "Financial Dashboard",
-            "total_revenue": raw_cash_in,  # <--- Shows Total Cash In
+            # Data
+            "total_revenue": raw_cash_in,
             "total_paid_to_suppliers": supplier_costs,
-            "current_balance": balance,
+            "current_balance": cash_profit,  # This acts as "Net Cash Flow" for the period
             "unpaid_debt": unpaid_debt,
-            "profit": cash_profit,
+            # Filter State (So the template knows which button is active)
+            "period": period,
+            "date_from": date_from.strftime("%Y-%m-%d"),
+            "date_to": date_to.strftime("%Y-%m-%d"),
         }
     )
 
