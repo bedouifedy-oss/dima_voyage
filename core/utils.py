@@ -1,7 +1,11 @@
 # core/utils.py
+import logging
+
 import requests
 from amadeus import Client, ResponseError
 from django.urls import reverse
+
+logger = logging.getLogger(__name__)
 
 
 def send_visa_whatsapp(request, booking, lang):
@@ -9,8 +13,9 @@ def send_visa_whatsapp(request, booking, lang):
     Sends the Visa Form link via WhatsApp to the client.
     Returns: (bool: Success?, str: Message)
     """
-    from core.models import \
-        WhatsAppSettings  # Import inside to avoid circular dependency
+    from core.models import (  # Import inside to avoid circular dependency
+        WhatsAppSettings,
+    )
 
     config = WhatsAppSettings.objects.first()
     if not config:
@@ -36,7 +41,7 @@ def send_visa_whatsapp(request, booking, lang):
     # Send via API
     try:
         payload = {"token": config.api_token, "to": booking.client.phone, "body": msg}
-        response = requests.post(config.api_url, data=payload)
+        response = requests.post(config.api_url, data=payload, timeout=30)
 
         if response.status_code == 200:
             return True, "Sent successfully."
@@ -44,6 +49,7 @@ def send_visa_whatsapp(request, booking, lang):
             return False, f"API Error: {response.text}"
 
     except Exception as e:
+        logger.exception("WhatsApp API connection error")
         return False, f"Connection Error: {str(e)}"
 
 
@@ -57,7 +63,7 @@ def get_amadeus_client():
     config = AmadeusSettings.objects.first()
 
     if not config:
-        print("❌ Error: Amadeus API Settings not configured in Admin.")
+        logger.warning("Amadeus API Settings not configured in Admin.")
         return None
 
     try:
@@ -67,8 +73,8 @@ def get_amadeus_client():
             client_secret=config.client_secret,
             hostname=config.environment,  # 'test' or 'production'
         )
-    except Exception as e:
-        print(f"❌ Error initializing Amadeus Client: {e}")
+    except Exception:
+        logger.exception("Error initializing Amadeus Client")
         return None
 
 
@@ -83,7 +89,7 @@ def search_airports(keyword):
     if not amadeus:
         return []  # Fail gracefully if no config found
 
-    print(f"🔍 Amadeus Searching for: {keyword}")
+    logger.debug(f"Amadeus searching for: {keyword}")
 
     try:
         response = amadeus.reference_data.locations.get(
@@ -103,14 +109,14 @@ def search_airports(keyword):
                     }
                 )
 
-        print(f"✅ Found {len(results)} locations")
+        logger.debug(f"Found {len(results)} locations")
         return results
 
     except ResponseError as error:
-        print(f"❌ Amadeus API Error: {error}")
+        logger.error(f"Amadeus API Error: {error}")
         return []
-    except Exception as e:
-        print(f"❌ Python Error: {e}")
+    except Exception:
+        logger.exception("Unexpected error in search_airports")
         return []
 
 

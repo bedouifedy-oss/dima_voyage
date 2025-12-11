@@ -1,0 +1,230 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans 'Assign to Agent' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* Light mode defaults */
+    .assign-container {
+        --assign-bg: #ffffff;
+        --assign-bg-alt: #f9fafb;
+        --assign-border: #e5e7eb;
+        --assign-text: #1f2937;
+        --assign-text-muted: #6b7280;
+        --assign-primary: #4f46e5;
+        --assign-primary-hover: #4338ca;
+        --assign-secondary: #6b7280;
+        --assign-secondary-hover: #4b5563;
+    }
+
+    /* Dark mode - detect via Unfold's dark class */
+    html.dark .assign-container,
+    body.dark .assign-container,
+    [data-theme="dark"] .assign-container {
+        --assign-bg: #1f2937;
+        --assign-bg-alt: #374151;
+        --assign-border: #4b5563;
+        --assign-text: #f9fafb;
+        --assign-text-muted: #9ca3af;
+        --assign-primary: #6366f1;
+        --assign-primary-hover: #818cf8;
+        --assign-secondary: #4b5563;
+        --assign-secondary-hover: #6b7280;
+    }
+
+    .assign-container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 0 20px;
+    }
+
+    .assign-card {
+        background: var(--assign-bg);
+        border: 1px solid var(--assign-border);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .assign-card h3 {
+        margin: 0 0 16px 0;
+        color: var(--assign-text);
+        font-size: 1.1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .booking-list {
+        max-height: 250px;
+        overflow-y: auto;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        border: 1px solid var(--assign-border);
+        border-radius: 8px;
+    }
+
+    .booking-list li {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--assign-border);
+        color: var(--assign-text);
+        display: flex;
+        gap: 8px;
+    }
+
+    .booking-list li:last-child {
+        border-bottom: none;
+    }
+
+    .booking-list li:nth-child(even) {
+        background: var(--assign-bg-alt);
+    }
+
+    .booking-list li strong {
+        color: var(--assign-primary);
+        font-family: monospace;
+    }
+
+    .form-row {
+        margin-bottom: 16px;
+    }
+
+    .form-row label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: var(--assign-text);
+    }
+
+    .form-row select {
+        width: 100%;
+        padding: 12px 16px;
+        border: 1px solid var(--assign-border);
+        border-radius: 8px;
+        background: var(--assign-bg);
+        color: var(--assign-text);
+        font-size: 14px;
+        cursor: pointer;
+        transition: border-color 0.2s;
+    }
+
+    .form-row select:focus {
+        outline: none;
+        border-color: var(--assign-primary);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+
+    .form-row .help {
+        color: var(--assign-text-muted);
+        font-size: 0.85em;
+        margin-top: 8px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    .action-buttons .btn-primary {
+        background: var(--assign-primary);
+        color: #ffffff;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+
+    .action-buttons .btn-primary:hover {
+        background: var(--assign-primary-hover);
+    }
+
+    .action-buttons .btn-secondary {
+        background: var(--assign-secondary);
+        color: #ffffff;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.2s;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .action-buttons .btn-secondary:hover {
+        background: var(--assign-secondary-hover);
+    }
+
+    .count-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--assign-primary);
+        color: #ffffff;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        min-width: 28px;
+    }
+</style>
+
+<div class="assign-container">
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="assign-card">
+            <h3>
+                📋 Selected Bookings
+                <span class="count-badge">{{ queryset.count }}</span>
+            </h3>
+            <ul class="booking-list">
+                {% for obj in queryset %}
+                <li><strong>{{ obj.ref }}</strong> <span>{{ obj.client }}</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="assign-card">
+            <h3>👤 Select Agent</h3>
+            <div class="form-row">
+                <label for="id_agent">{{ form.agent.label }}</label>
+                {{ form.agent }}
+                {% if form.agent.help_text %}
+                <p class="help">{{ form.agent.help_text }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Hidden inputs to preserve selection -->
+        {% for obj in queryset %}
+        <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}" />
+        {% endfor %}
+        <input type="hidden" name="action" value="assign_to_agent" />
+
+        <div class="action-buttons">
+            <button type="submit" name="apply" class="btn-primary">
+                ✅ Assign to Selected Agent
+            </button>
+            <a href="{% url opts|admin_urlname:'changelist' %}" class="btn-secondary">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

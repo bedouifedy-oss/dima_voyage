@@ -16,3 +16,24 @@ venv/
 env/
 .pytest_cache/
 staticfiles/
+
+# --- IDE & Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- Dev Tools & Analysis ---
+.sonar/
+.scannerwork/
+sonar-project.properties
+.vulture_whitelist.py
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.bandit/

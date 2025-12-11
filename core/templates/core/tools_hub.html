@@ -1,0 +1,254 @@
+{% extends "admin/base_site.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  /* Light-mode defaults declared on the wrapper, same pattern as dashboard.html */
+  .tools-wrapper {
+    --tools-card-bg: #ffffff;
+    --tools-border: #e5e7eb;
+    --tools-text: #111827;
+    --tools-muted: #6b7280;
+    --tools-muted-soft: #9ca3af;
+    --tools-pill-bg: #eff6ff;
+    --tools-code-bg: #f3f4f6;
+    --tools-button-bg: #2563eb;
+    --tools-button-text: #ffffff;
+    --tools-info-bg: #f9fafb;
+    --tools-info-border: #d1d5db;
+
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px 16px 32px;
+    color: var(--tools-text);
+  }
+
+  /* Dark-mode overrides driven by admin theme classes, like .dashboard-container */
+  html.dark .tools-wrapper,
+  body.dark .tools-wrapper,
+  [data-theme="dark"] .tools-wrapper {
+    --tools-card-bg: #111827;   /* gray-900 */
+    --tools-border: #374151;    /* gray-700 */
+    --tools-text: #f9fafb;      /* gray-50 */
+    --tools-muted: #9ca3af;     /* gray-400 */
+    --tools-muted-soft: #6b7280;
+    --tools-pill-bg: #1f2937;
+    --tools-code-bg: #111827;
+    --tools-button-bg: #2563eb;
+    --tools-button-text: #f9fafb;
+    --tools-info-bg: #020617;
+    --tools-info-border: #1f2937;
+  }
+
+  .tools-header-title {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--tools-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tools-header-subtitle {
+    margin: 6px 0 0;
+    color: var(--tools-muted);
+    font-size: 14px;
+    max-width: 640px;
+  }
+
+  .tools-section-label {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--tools-muted);
+    font-size: 13px;
+  }
+
+  .tools-templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .tools-card {
+    background: var(--tools-card-bg);
+    border-radius: 10px;
+    border: 1px solid var(--tools-border);
+    padding: 16px 16px 14px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 140px;
+  }
+
+  .tools-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .tools-card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    background: var(--tools-pill-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .tools-card-name {
+    font-weight: 600;
+    color: var(--tools-text);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tools-card-subtitle {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--tools-muted);
+    margin-top: 2px;
+  }
+
+  .tools-card-id {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--tools-muted);
+    word-break: break-all;
+  }
+
+  .tools-card-id-label {
+    font-weight: 500;
+    color: var(--tools-text);
+  }
+
+  .tools-card-id-code {
+    background: var(--tools-code-bg);
+    padding: 1px 4px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  .tools-card-footer {
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tools-card-footer-hint {
+    font-size: 11px;
+    color: var(--tools-muted-soft);
+  }
+
+  .tools-card-button {
+    padding: 6px 10px;
+    font-size: 12px;
+    background: var(--tools-button-bg);
+    color: var(--tools-button-text);
+    border-radius: 6px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .tools-empty {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    border: 1px dashed var(--tools-info-border);
+    background: var(--tools-info-bg);
+    font-size: 13px;
+    color: var(--tools-text);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tools-wrapper">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:24px;">
+        <div>
+            <h1 class="tools-header-title">
+                <span style="font-size:26px;">🧰</span>
+                <span>Tools / Documents</span>
+            </h1>
+            <p class="tools-header-subtitle">
+                Central hub for internal tools. Use the cards below to launch dynamic document templates
+                and generate printable PDFs for tickets, vouchers, attestations, and more.
+            </p>
+        </div>
+    </div>
+
+    <div class="tools-section-label">
+        <span style="font-size:18px;">📄</span>
+        <span><strong>Document Generator Templates</strong></span>
+        <span style="opacity:0.7;">·</span>
+        <span style="opacity:0.7;">{{ templates|length }} configured</span>
+    </div>
+
+    {% if templates %}
+        <div class="tools-templates-grid">
+            {% for t in templates %}
+                <div class="tools-card">
+                    <div>
+                        <div class="tools-card-header">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <div class="tools-card-icon">📝</div>
+                                <div>
+                                    <div class="tools-card-name" title="{{ t.name }}">{{ t.name }}</div>
+                                    <div class="tools-card-subtitle">Manual Template</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if t.slug %}
+                            <div class="tools-card-id">
+                                <span class="tools-card-id-label">ID&nbsp;:</span>
+                                <code class="tools-card-id-code">{{ t.slug }}</code>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="tools-card-footer">
+                        <div class="tools-card-footer-hint">
+                            Generates PDF via WeasyPrint
+                        </div>
+                        {% if booking_id %}
+                        <a href="{% url 'document_tool' t.slug %}?booking_id={{ booking_id }}"
+                           class="button tools-card-button">
+                        {% else %}
+                        <a href="{% url 'document_tool' t.slug %}"
+                           class="button tools-card-button">
+                        {% endif %}
+                            <span>Launch</span>
+                            <span>↗</span>
+                        </a>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="tools-empty">
+            <span style="font-size:18px;">ℹ️</span>
+            <div>
+                <div style="font-weight:500; margin-bottom:2px;">No document templates configured yet.</div>
+                <div>Go to <strong>Admin → Document Templates</strong> to create your first template.</div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,4 +1,5 @@
 from django import forms
+from django.core.exceptions import ValidationError
 
 from .models import Booking, Payment, VisaApplication
 
@@ -140,7 +141,7 @@ class BookingAdminForm(forms.ModelForm):
     class Meta:
         model = Booking
         fields = "__all__"
-        exclude = ["created_at", "updated_at", "created_by"]
+        exclude = ["created_at", "updated_at"]
         widgets = {
             "visa_form_config": forms.CheckboxSelectMultiple(
                 choices=[
@@ -225,6 +226,42 @@ class VisaForm(forms.ModelForm):
                 translation = VISA_LABELS[field_name].get(lang)
                 if translation:
                     field.label = translation
+
+    def _validate_file(self, f, field_label, max_mb=10):
+        if f and f.size > max_mb * 1024 * 1024:
+            raise ValidationError(f"{field_label}: max file size is {max_mb}MB.")
+        return f
+
+    def clean_photo(self):
+        photo = self._validate_file(self.cleaned_data.get("photo"), "Photo")
+        if photo and not photo.content_type.startswith("image/"):
+            raise ValidationError("Photo must be an image file.")
+        return photo
+
+    def clean_ticket_departure(self):
+        return self._validate_file(
+            self.cleaned_data.get("ticket_departure"), "Departure ticket"
+        )
+
+    def clean_ticket_return(self):
+        return self._validate_file(
+            self.cleaned_data.get("ticket_return"), "Return ticket"
+        )
+
+    def clean_travel_insurance(self):
+        return self._validate_file(
+            self.cleaned_data.get("travel_insurance"), "Travel insurance"
+        )
+
+    def clean_hotel_reservation(self):
+        return self._validate_file(
+            self.cleaned_data.get("hotel_reservation"), "Hotel reservation"
+        )
+
+    def clean_financial_proofs(self):
+        return self._validate_file(
+            self.cleaned_data.get("financial_proofs"), "Financial proofs"
+        )
 
 
 # --- 5. INTERNAL ADMIN INLINE FORM (Fixes Mixed Language) ---

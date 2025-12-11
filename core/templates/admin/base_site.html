@@ -1,0 +1,15 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dima Finance Admin{% endblock %}
+
+{% block content %}
+    {{ block.super }}
+{% endblock %}
+
+{% block footer %}
+    {{ block.super }}
+    <a href="{% url 'tools_hub' %}"
+       style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; background: #111827; color: #f9fafb; padding: 10px 14px; border-radius: 9999px; box-shadow: 0 10px 25px rgba(15,23,42,0.5); text-decoration: none; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;">
+        <span>🛠 Tools</span>
+    </a>
+{% endblock %}

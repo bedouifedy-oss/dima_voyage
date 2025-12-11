@@ -12,3 +12,7 @@ pytest
 pytest-django
 whitenoise
 sentry-sdk
+black
+isort
+flake8
+pre-commit

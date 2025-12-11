@@ -18,20 +18,22 @@
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card">
-                    <div class="header-bg text-center">
-                    <div style="position: absolute; top: 20px; right: 20px;">
-			<div class="btn-group btn-group-sm" role="group">
-      			     <a href="?lang=tn" class="btn btn-outline-light border-0" style="opacity: 0.7;">
-                                  🇹🇳 تونسي
-                             </a>
-			     <a href="?lang=fr" class="btn btn-light fw-bold active border-0" style="opacity: 1;">
-		 	  	  🇫🇷 Français
-		             </a>
-			</div>
-		    </div>
-                        <h3>📋 Formulaire de Visa</h3>
-                        <p class="mb-0">Réf: <strong>{{ booking.ref }}</strong></p>
-                        <p>{{ booking.client.name }}</p>
+                    <div class="header-bg">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap">
+                            <div class="mb-2">
+                                <h3>📋 Formulaire de Visa</h3>
+                                <p class="mb-0">Réf: <strong>{{ booking.ref }}</strong></p>
+                                <p class="mb-0">{{ booking.client.name }}</p>
+                            </div>
+                            <div class="btn-group btn-group-sm mt-2" role="group">
+                                <a href="?lang=tn" class="btn btn-outline-light border-0" style="opacity: 0.7;">
+                                    🇹🇳 تونسي
+                                </a>
+                                <a href="?lang=fr" class="btn btn-light fw-bold active border-0" style="opacity: 1;">
+                                    🇫🇷 Français
+                                </a>
+                            </div>
+                        </div>
                     </div>
                     <div class="card-body p-4">
                         <form method="post" enctype="multipart/form-data">
@@ -54,6 +56,10 @@
                                     {{ form.passport_number }}
                                 </div>
                             </div>
+
+                            <p class="text-muted small mt-1">
+                                Taille maximale par fichier&nbsp;: <strong>10 Mo</strong>
+                            </p>
 
                             <div class="row">
                                 {% for field in form %}

@@ -286,6 +286,17 @@
             </div>
         </div>
 
+        <div class="metric-card card-orange" style="border-top: 5px solid var(--color-orange);">
+            <div>
+                <div class="metric-icon">↩️</div>
+                <span class="metric-label">Total Refunds</span>
+                <span class="metric-value text-main">
+                    -{{ total_refunds|intcomma }} <small style="font-size: 16px; color: var(--text-sub);">TND</small>
+                </span>
+                <span class="metric-subtext">Money returned to clients</span>
+            </div>
+        </div>
+
         <div class="metric-card card-main">
             <div>
                 <div class="metric-icon">🏦</div>
@@ -328,6 +339,8 @@
         <ul style="margin: 0; padding-left: 20px;">
             <li><strong>Total Revenue:</strong> Strictly counts "Cash In" (Customer Payments) from the Ledger.</li>
             <li><strong>Supplier Costs (Paid):</strong> Counts only money <em>allocated</em> to bookings via the "Safety Bridge" or paid Expenses.</li>
+            <li><strong>Total Refunds:</strong> Money returned to clients (refunds issued).</li>
+            <li><strong>Account Balance:</strong> Revenue - Supplier Costs - Refunds.</li>
             <li><strong>Unpaid Liabilities:</strong> This is the sum of all Supplier Costs on bookings + Unpaid Expenses.</li>
             <li><em>To fix this number, go to Bookings or Expenses and use the "Pay via Ledger" action.</em></li>
         </ul>

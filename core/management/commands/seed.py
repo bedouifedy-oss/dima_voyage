@@ -1,13 +1,21 @@
 # core/management/commands/seed.py
+import logging
+import os
+import secrets
 from datetime import date, timedelta
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
 from core.models import Booking, Client, Expense, Payment, Supplier
 
-User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def get_user():
+    from django.contrib.auth import get_user_model
+
+    return get_user_model()
 
 
 class Command(BaseCommand):
@@ -17,6 +25,7 @@ class Command(BaseCommand):
         self.stdout.write("Starting database seeding...")
 
         # 1. Create Superuser (Admin)
+        User = get_user()
         try:
             u, created = User.objects.get_or_create(
                 username="admin",
@@ -27,11 +36,20 @@ class Command(BaseCommand):
                 },
             )
             if created:
-                u.set_password("password")  # ⚠️ CHANGE THIS IMMEDIATELY
+                # Use env var or generate secure random password
+                password = os.environ.get(
+                    "SEED_ADMIN_PASSWORD", secrets.token_urlsafe(16)
+                )
+                u.set_password(password)
                 u.save()
                 self.stdout.write(
                     self.style.SUCCESS(
-                        'Superuser "admin" created with password "password"'
+                        f'Superuser "admin" created. Password: {password}'
+                    )
+                )
+                self.stdout.write(
+                    self.style.WARNING(
+                        "⚠️  Save this password now! It won't be shown again."
                     )
                 )
             else:

@@ -24,11 +24,18 @@ if SENTRY_DSN:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "django-insecure-fallback-key")
-DEBUG = os.environ.get("DEBUG") == "True"
-ALLOWED_HOSTS = [
-    "*",
-]
+DEBUG = os.environ.get("DEBUG", "False") == "True"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-only-key-do-not-use-in-production"
+    else:
+        raise ValueError(
+            "DJANGO_SECRET_KEY environment variable is required in production"
+        )
+
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
 
 # Application definition
@@ -120,6 +127,10 @@ STATICFILES_DIRS = [
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- FILE UPLOAD LIMITS ---
+DATA_UPLOAD_MAX_MEMORY_SIZE = 40 * 1024 * 1024  # 40MB total request
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB per file
+
 
 # --- UNFOLD CONFIGURATION ---
 UNFOLD = {
@@ -131,6 +142,24 @@ UNFOLD = {
         "show_search": True,
         "show_all_applications": False,
         "navigation": [
+            {
+                "title": "My Work",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "📋 My Assigned Bookings",
+                        "icon": "assignment_ind",
+                        "link": "/admin/core/myassignedbooking/",
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                    {
+                        "title": "📊 Productivity",
+                        "icon": "trending_up",
+                        "link": reverse_lazy("productivity_dashboard"),
+                        "permission": lambda request: request.user.is_staff,
+                    },
+                ],
+            },
             {
                 "title": "Operations",
                 "separator": True,
@@ -166,6 +195,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm(
                             "core.view_supplier"
                         ),
+                    },
+                    {
+                        "title": "Tools / Documents",
+                        "icon": "description",
+                        "link": "/tools/",
+                        "permission": lambda request: request.user.is_staff,
                     },
                 ],
             },

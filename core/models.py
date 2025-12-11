@@ -1,8 +1,8 @@
 # core/models.py
 from decimal import Decimal
 
-from django.contrib.auth import get_user_model
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 from simple_history.models import HistoricalRecords
 
@@ -10,10 +10,13 @@ from .constants import BOOKING_STATUSES  # New
 from .constants import LEDGER_ENTRY_TYPES  # New
 from .constants import OPERATION_TYPES  # NEW IMPORT
 from .constants import PAYMENT_TRANSACTION_TYPES  # New
-from .constants import (BOOKING_TYPES, PAYMENT_STATUSES,
-                        SUPPLIER_PAYMENT_STATUSES)
+from .constants import BOOKING_TYPES, PAYMENT_STATUSES, SUPPLIER_PAYMENT_STATUSES
 
-User = get_user_model()
+
+def get_user():
+    from django.contrib.auth import get_user_model
+
+    return get_user_model()
 
 
 def default_visa_fields():
@@ -32,6 +35,25 @@ class Client(models.Model):
         return self.name
 
 
+class EditorSettings(models.Model):
+    """Configuration for rich-text editor integrations (e.g. TinyMCE)."""
+
+    name = models.CharField(max_length=50, default="Default")
+    tinymce_api_key = models.CharField(
+        max_length=255,
+        help_text="TinyMCE Cloud API key (from tiny.cloud dashboard).",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Editor Settings"
+        verbose_name_plural = "Editor Settings"
+
+    def __str__(self):
+        return self.name
+
+
 class Supplier(models.Model):
     name = models.CharField(max_length=200)
     contact = models.CharField(max_length=200, blank=True, null=True)
@@ -43,8 +65,8 @@ class Supplier(models.Model):
 # --- THE CORE TRANSACTION MODEL ---
 class Booking(models.Model):
     # 1. Classification & Status
-    ref = models.CharField(max_length=30, unique=True, blank=True)
-    client = models.ForeignKey(Client, on_delete=models.PROTECT)
+    ref = models.CharField(max_length=30, unique=True, blank=True, db_index=True)
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, db_index=True)
     parent_booking = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -118,12 +140,35 @@ class Booking(models.Model):
     )
 
     created_by = models.ForeignKey(
-        User, on_delete=models.SET_NULL, null=True, related_name="booked_by"
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="bookings_created",
+        verbose_name="Created By",
+        help_text="Agent who created this booking (auto-assigned)",
+    )
+    assigned_to = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bookings_assigned",
+        verbose_name="Assigned To",
+        help_text="Agent responsible for handling this booking",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
     history = HistoricalRecords()
+
+    class Meta:
+        permissions = [
+            ("view_financial_dashboard", "Can view financial dashboard"),
+            ("view_all_bookings", "Can view all bookings (not just own)"),
+            ("assign_to_others", "Can assign bookings to other agents"),
+            ("cancel_any_booking", "Can cancel any booking"),
+            ("manage_financials", "Can manage payments, ledger, and expenses"),
+        ]
 
     def save(self, *args, **kwargs):
         # 1. Generate Ref if missing (New Booking)
@@ -171,6 +216,15 @@ class Booking(models.Model):
         return f"{self.ref} ({self.get_booking_type_display()})"
 
 
+class MyAssignedBooking(Booking):
+    """Proxy model for 'My Assigned Bookings' admin view."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "My Assigned Booking"
+        verbose_name_plural = "My Assigned Bookings"
+
+
 # --- FINANCIAL MODELS ---
 class Payment(models.Model):
     PAYMENT_METHODS = [
@@ -199,7 +253,7 @@ class Payment(models.Model):
     date = models.DateField()
     reference = models.CharField(max_length=100, blank=True, null=True)
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     history = HistoricalRecords()
@@ -243,7 +297,7 @@ class LedgerEntry(models.Model):
         Booking, null=True, blank=True, on_delete=models.SET_NULL
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True)
 
     is_consolidated = models.BooleanField(
         default=False,
@@ -281,7 +335,7 @@ class KnowledgeBase(models.Model):
     utility_score = models.IntegerField("Utilité", choices=UTILITY_CHOICES, default=3)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    author = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    author = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
         return self.title
@@ -300,10 +354,13 @@ class Announcement(models.Model):
     content = models.TextField()
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="low")
     acknowledged_by = models.ManyToManyField(
-        User, blank=True, related_name="acknowledged_announcements", editable=False
+        "auth.User",
+        blank=True,
+        related_name="acknowledged_announcements",
+        editable=False,
     )
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True)
 
     def __str__(self):
         return self.title
@@ -503,3 +560,67 @@ class BookingLedgerAllocation(models.Model):
 
     def __str__(self):
         return f"{self.amount} allocated to {self.booking.ref}"
+
+
+# --- DYNAMIC DOCUMENT GENERATOR MODELS ---
+
+
+class DocumentTemplate(models.Model):
+    PARSER_CHOICES = [
+        ("none", "No Parsing (Manual Only)"),
+    ]
+
+    name = models.CharField(max_length=100, help_text="e.g., 'Flight Ticket (Amadeus)'")
+    slug = models.SlugField(unique=True, help_text="Unique ID, e.g., 'flight_ticket'")
+
+    # Configuration
+    parser_type = models.CharField(
+        max_length=50, choices=PARSER_CHOICES, default="none"
+    )
+
+    # We store the Manual Fields definition as JSON
+    # Example: [{"key": "pax_name", "label": "Passenger Name", "type": "text"}]
+    manual_fields_config = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Define the manual inputs needed.",
+    )
+
+    # The HTML Template Code (Stored in DB)
+    # For simplicity, we store the HTML content directly here so it can be edited in Admin.
+    html_content = models.TextField(
+        help_text="Paste your HTML template here. Use Django {{ variables }} syntax."
+    )
+
+    def __str__(self):
+        return self.name
+
+
+class GeneratedDocument(models.Model):
+    template = models.ForeignKey(DocumentTemplate, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Data Storage
+    raw_text = models.TextField(
+        blank=True,
+        null=True,
+        help_text="The pasted text used for parsing (e.g. GDS/Voucher).",
+    )
+    manual_data = models.JSONField(default=dict, blank=True)
+    parsed_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "\U0001F4C4 Generated Document"
+
+    def __str__(self):
+        # Try to find a name, fallback to ID
+        name = (
+            self.manual_data.get("passenger_name")
+            or self.manual_data.get("name")
+            or f"Doc #{self.id}"
+        )
+        return f"{self.template.name} - {name}"
+
+    def get_print_url(self):
+        return reverse("print_document", args=[self.id])

@@ -1,0 +1,372 @@
+{% extends "admin/base_site.html" %}
+{% load humanize %}
+
+{% block content %}
+<style>
+    /* Light mode defaults */
+    .productivity-container {
+        --color-primary: #4f46e5;
+        --color-success: #10b981;
+        --color-warning: #f59e0b;
+        --color-danger: #ef4444;
+        --color-gray: #6b7280;
+        --bg-card: #ffffff;
+        --bg-card-alt: #f9fafb;
+        --bg-header: #f3f4f6;
+        --border-color: #e5e7eb;
+        --text-main: #1f2937;
+        --text-sub: #6b7280;
+        --badge-primary-bg: #e0e7ff;
+        --badge-primary-text: #4338ca;
+        --badge-success-bg: #d1fae5;
+        --badge-success-text: #059669;
+        --badge-warning-bg: #fef3c7;
+        --badge-warning-text: #d97706;
+    }
+
+    /* Dark mode - detect via Unfold's dark class */
+    html.dark .productivity-container,
+    body.dark .productivity-container,
+    [data-theme="dark"] .productivity-container {
+        --color-primary: #818cf8;
+        --color-success: #34d399;
+        --color-warning: #fbbf24;
+        --color-danger: #f87171;
+        --color-gray: #9ca3af;
+        --bg-card: #1f2937;
+        --bg-card-alt: #374151;
+        --bg-header: #374151;
+        --border-color: #4b5563;
+        --text-main: #f9fafb;
+        --text-sub: #9ca3af;
+        --badge-primary-bg: #3730a3;
+        --badge-primary-text: #c7d2fe;
+        --badge-success-bg: #065f46;
+        --badge-success-text: #a7f3d0;
+        --badge-warning-bg: #92400e;
+        --badge-warning-text: #fde68a;
+    }
+
+    .productivity-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .summary-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        text-align: center;
+    }
+
+    .summary-card .value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--color-primary);
+    }
+
+    .summary-card .label {
+        color: var(--text-sub);
+        font-size: 0.9rem;
+        margin-top: 5px;
+    }
+
+    .summary-card.warning .value {
+        color: var(--color-warning);
+    }
+
+    .agent-table {
+        width: 100%;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .agent-table th {
+        background: var(--bg-header);
+        padding: 15px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-main);
+        border-bottom: 2px solid var(--border-color);
+    }
+
+    .agent-table td {
+        padding: 15px;
+        border-bottom: 1px solid var(--border-color);
+        color: var(--text-main);
+    }
+
+    .agent-table tbody tr:hover {
+        background: var(--bg-card-alt);
+    }
+
+    .agent-name {
+        font-weight: 600;
+        color: var(--text-main);
+    }
+
+    .agent-email {
+        font-size: 0.85rem;
+        color: var(--text-sub);
+    }
+
+    .stat-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .stat-badge.primary {
+        background: var(--badge-primary-bg);
+        color: var(--badge-primary-text);
+    }
+
+    .stat-badge.success {
+        background: var(--badge-success-bg);
+        color: var(--badge-success-text);
+    }
+
+    .stat-badge.warning {
+        background: var(--badge-warning-bg);
+        color: var(--badge-warning-text);
+    }
+
+    .progress-bar {
+        height: 8px;
+        background: var(--border-color);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 5px;
+    }
+
+    .progress-bar .fill {
+        height: 100%;
+        background: var(--color-primary);
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 20px;
+        color: var(--text-main);
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-sub);
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+    }
+
+    @media (max-width: 768px) {
+        .agent-table {
+            display: block;
+            overflow-x: auto;
+        }
+    }
+
+    /* Date Filter Styles */
+    .date-filters {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .filter-label {
+        font-weight: 600;
+        color: var(--text-main);
+        margin-right: 8px;
+    }
+
+    .filter-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .filter-btn {
+        padding: 8px 16px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-card);
+        color: var(--text-main);
+        cursor: pointer;
+        font-size: 0.9rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .filter-btn:hover {
+        background: var(--bg-card-alt);
+        border-color: var(--color-primary);
+    }
+
+    .filter-btn.active {
+        background: var(--color-primary);
+        color: #ffffff;
+        border-color: var(--color-primary);
+    }
+
+    .custom-range {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+    }
+
+    .custom-range input[type="date"] {
+        padding: 8px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        background: var(--bg-card);
+        color: var(--text-main);
+        font-size: 0.9rem;
+    }
+
+    .custom-range input[type="date"]:focus {
+        outline: none;
+        border-color: var(--color-primary);
+    }
+
+    .custom-range .apply-btn {
+        padding: 8px 16px;
+        background: var(--color-primary);
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .custom-range .apply-btn:hover {
+        opacity: 0.9;
+    }
+
+    @media (max-width: 768px) {
+        .date-filters {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .custom-range {
+            margin-left: 0;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+    }
+</style>
+
+<div class="productivity-container">
+    <!-- Date Filters -->
+    <div class="date-filters">
+        <span class="filter-label">📅 Period:</span>
+        <div class="filter-buttons">
+            <a href="?period=today" class="filter-btn {% if period == 'today' %}active{% endif %}">Today</a>
+            <a href="?period=week" class="filter-btn {% if period == 'week' %}active{% endif %}">This Week</a>
+            <a href="?period=month" class="filter-btn {% if period == 'month' %}active{% endif %}">This Month</a>
+            <a href="?period=quarter" class="filter-btn {% if period == 'quarter' %}active{% endif %}">This Quarter</a>
+            <a href="?period=year" class="filter-btn {% if period == 'year' %}active{% endif %}">This Year</a>
+        </div>
+        <form class="custom-range" method="get">
+            <input type="hidden" name="period" value="custom">
+            <input type="date" name="date_from" value="{{ date_from }}" title="From Date">
+            <span style="color: var(--text-sub);">to</span>
+            <input type="date" name="date_to" value="{{ date_to }}" title="To Date">
+            <button type="submit" class="apply-btn">Apply</button>
+        </form>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <div class="value">{{ total_bookings_period }}</div>
+            <div class="label">Bookings ({{ period_label }})</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">{{ total_bookings_all|intcomma }}</div>
+            <div class="label">Total Bookings (All Time)</div>
+        </div>
+        <div class="summary-card warning">
+            <div class="value">{{ unassigned_bookings }}</div>
+            <div class="label">Unassigned Bookings</div>
+        </div>
+        <div class="summary-card">
+            <div class="value">{{ agents|length }}</div>
+            <div class="label">Active Agents</div>
+        </div>
+    </div>
+
+    <!-- Agent Performance Table -->
+    <h2 class="section-title">👥 Agent Performance - {{ period_label }}</h2>
+
+    {% if agents %}
+    <table class="agent-table">
+        <thead>
+            <tr>
+                <th>Agent</th>
+                <th>Created (Period)</th>
+                <th>Created (Total)</th>
+                <th>Assigned</th>
+                <th>Confirmed</th>
+                <th>Revenue Generated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for agent in agents %}
+            <tr>
+                <td>
+                    <div class="agent-name">
+                        {{ agent.get_full_name|default:agent.username }}
+                    </div>
+                    <div class="agent-email">{{ agent.email }}</div>
+                </td>
+                <td>
+                    <span class="stat-badge primary">{{ agent.bookings_created_period }}</span>
+                </td>
+                <td>{{ agent.bookings_created_total }}</td>
+                <td>
+                    <span class="stat-badge warning">{{ agent.bookings_assigned_active }}</span>
+                    <small style="color: var(--text-sub);">/ {{ agent.bookings_assigned_total }}</small>
+                </td>
+                <td>
+                    <span class="stat-badge success">{{ agent.bookings_confirmed_period }}</span>
+                </td>
+                <td>
+                    <strong>{{ agent.total_revenue_period|intcomma }}</strong> TND
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="no-data">
+        <p>No agent data available.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

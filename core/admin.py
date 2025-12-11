@@ -1,16 +1,18 @@
 # core/admin.py
+import logging
 import secrets
 import string
 from datetime import datetime
 from decimal import Decimal
 
 import requests
+from django import forms as django_forms
 from django.contrib import admin, messages
 from django.db import models  # Essential for the Filter
 from django.db import transaction
 from django.db.models import DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Coalesce
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -18,10 +20,34 @@ from unfold.admin import ModelAdmin
 from unfold.contrib.filters.admin import RangeDateFilter
 
 from .forms import BookingAdminForm, VisaInlineForm
-from .models import (AmadeusSettings, Announcement, Booking,
-                     BookingLedgerAllocation, Client, Expense, FlightTicket,
-                     KnowledgeBase, LedgerEntry, Payment, Supplier, User,
-                     VisaApplication, WhatsAppSettings)
+from .models import (
+    AmadeusSettings,
+    Announcement,
+    Booking,
+    BookingLedgerAllocation,
+    Client,
+    DocumentTemplate,
+    EditorSettings,
+    Expense,
+    FlightTicket,
+    GeneratedDocument,
+    KnowledgeBase,
+    LedgerEntry,
+    MyAssignedBooking,
+    Payment,
+    Supplier,
+    VisaApplication,
+    WhatsAppSettings,
+)
+from .permissions import can_assign_to_others, can_manage_financials, is_manager
+
+logger = logging.getLogger(__name__)
+
+
+def get_user():
+    from django.contrib.auth import get_user_model
+
+    return get_user_model()
 
 
 # --- CUSTOM FILTERS ---
@@ -165,6 +191,41 @@ def pay_via_ledger(modeladmin, request, queryset):
     )
 
 
+# --- BATCH ASSIGNMENT ACTIONS ---
+@admin.action(description="📋 Assign to me")
+def assign_to_me(modeladmin, request, queryset):
+    """Assign selected bookings to the current user."""
+    count = queryset.update(assigned_to=request.user)
+    messages.success(request, f"✅ {count} booking(s) assigned to you.")
+
+
+@admin.action(description="🚫 Unassign (remove assignment)")
+def unassign_bookings(modeladmin, request, queryset):
+    """Remove assignment from selected bookings."""
+    count = queryset.update(assigned_to=None)
+    messages.success(request, f"✅ {count} booking(s) unassigned.")
+
+
+class AssignToAgentForm(django_forms.Form):
+    """Form for selecting an agent to assign bookings to."""
+
+    agent = django_forms.ModelChoiceField(
+        queryset=None,
+        label="Select Agent",
+        help_text="Choose the agent to assign selected bookings to.",
+        widget=django_forms.Select(attrs={"class": "form-control"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        from django.contrib.auth import get_user_model
+
+        super().__init__(*args, **kwargs)
+        User = get_user_model()
+        self.fields["agent"].queryset = User.objects.filter(is_staff=True).order_by(
+            "first_name", "username"
+        )
+
+
 # --- 3. MAIN BOOKING ADMIN ---
 
 
@@ -176,9 +237,10 @@ class BookingAdmin(ModelAdmin):
     list_display = (
         "ref",
         "client",
-        "created_at",  # Using created_at instead of trip_date
+        "assigned_display",
+        "created_at",
         "booking_type",
-        "supplier_payment_status",  # <--- NEW: The Status Dot
+        "supplier_payment_status",
         "total_amount",
         "status_badge",
         "balance_display",
@@ -190,6 +252,8 @@ class BookingAdmin(ModelAdmin):
         "payment_status",
         "supplier_payment_status",
         "booking_type",
+        "assigned_to",
+        "created_by",
         ("created_at", RangeDateFilter),
     )
 
@@ -199,20 +263,26 @@ class BookingAdmin(ModelAdmin):
         "ref",
         "payment_status",
         "created_at",
+        "created_by",
+        "assign_to_me_button",
         "balance_display",
         "invoice_link",
+        "documents_link",
         "visa_link_copy",
         "send_whatsapp_link",
     )
 
     # --- Added Actions Here ---
     actions = [
+        assign_to_me,
+        unassign_bookings,
+        "assign_to_agent",
         "configure_whatsapp_send",
         "send_whatsapp_tn",
         "send_whatsapp_fr",
         "cancel_booking",
         pay_via_ledger,
-    ]  # Added cancel_booking
+    ]
     fieldsets = (
         (
             "✈️ Trip & Customer",
@@ -220,9 +290,17 @@ class BookingAdmin(ModelAdmin):
                 "fields": (
                     ("ref", "created_at"),
                     "client",
+                    "documents_link",
                     "booking_type",
                     "description",
                 )
+            },
+        ),
+        (
+            "👤 Assignment",
+            {
+                "fields": (("created_by", "assigned_to", "assign_to_me_button"),),
+                "description": "Created by is auto-set. Assign to delegate responsibility.",
             },
         ),
         (
@@ -262,7 +340,110 @@ class BookingAdmin(ModelAdmin):
 
     inlines = [VisaInline, FlightTicketInline, PaymentHistoryInline]
 
+    @admin.display(description="Assigned To")
+    def assigned_display(self, obj):
+        """Display the agent assigned to this booking."""
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.username
+        return "—"
+
+    def assign_to_me_button(self, obj):
+        """Render 'Assign to Me' button using stored request."""
+        if not obj or not obj.pk:
+            return "—"
+        if not hasattr(self, "_current_request"):
+            return "—"
+        return format_html(
+            '<button type="button" class="button" style="padding: 5px 15px;" '
+            "onclick=\"document.getElementById('id_assigned_to').value='{}'; "
+            "this.innerHTML='✓ Selected';\">📋 Assign to Me</button>",
+            self._current_request.user.pk,
+        )
+
+    assign_to_me_button.short_description = "Quick Assign"
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        """Store request for use in assign_to_me_button."""
+        self._current_request = request
+        return super().change_view(request, object_id, form_url, extra_context)
+
+    @admin.action(description="👤 Assign to specific agent...")
+    def assign_to_agent(self, request, queryset):
+        """Assign selected bookings to a specific agent (shows intermediate form)."""
+        # If form was submitted with agent selection
+        if "apply" in request.POST:
+            form = AssignToAgentForm(request.POST)
+            if form.is_valid():
+                agent = form.cleaned_data["agent"]
+                count = queryset.update(assigned_to=agent)
+                agent_name = agent.get_full_name() or agent.username
+                messages.success(
+                    request, f"✅ {count} booking(s) assigned to {agent_name}."
+                )
+                return None
+
+        # Show intermediate form
+        form = AssignToAgentForm()
+        # Include admin site context for sidebar/navigation
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Assign Bookings to Agent",
+            "queryset": queryset,
+            "form": form,
+            "action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+            "opts": self.model._meta,
+            "media": self.media,
+        }
+        return render(request, "admin/core/booking/assign_to_agent.html", context)
+
+    def get_queryset(self, request):
+        """All users can view all bookings."""
+        qs = super().get_queryset(request)
+        return qs
+
+    def has_change_permission(self, request, obj=None):
+        """Check if user can change a specific booking."""
+        base = super().has_change_permission(request, obj)
+        if not base or obj is None:
+            return base
+
+        # Managers can edit any booking
+        if is_manager(request.user):
+            return True
+
+        # Agents can only edit bookings they created or are assigned to
+        return obj.created_by == request.user or obj.assigned_to == request.user
+
+    def has_delete_permission(self, request, obj=None):
+        """Only managers can delete bookings."""
+        base = super().has_delete_permission(request, obj)
+        return base and is_manager(request.user)
+
+    def get_actions(self, request):
+        """Filter actions based on user permissions."""
+        actions = super().get_actions(request)
+
+        # Remove actions agents can't perform
+        if not can_assign_to_others(request.user):
+            actions.pop("assign_to_agent", None)
+
+        # Cancel booking is allowed for all users (removed restriction)
+
+        if not can_manage_financials(request.user):
+            actions.pop("pay_via_ledger", None)
+
+        return actions
+
     def save_model(self, request, obj, form, change):
+        # Auto-assign on creation
+        if not change:
+            # Set created_by if not already set
+            if not obj.created_by:
+                obj.created_by = request.user
+            # Auto-assign to creator if not explicitly set by admin
+            if not obj.assigned_to:
+                obj.assigned_to = request.user
+
         # A. Auto-Generate Reference
         if not obj.ref:
             year_suffix = str(datetime.now().year)[-2:]
@@ -335,14 +516,18 @@ class BookingAdmin(ModelAdmin):
         return format_html(
             """
             <div class="flex items-center gap-2">
-                <input type="text" value="{url}" id="visa_link_{id}" readonly 
+                <input type="text" value="{url}" id="visa_link_{id}" readonly
                        class="vTextField" style="width: 350px;">
-                <button type="button" class="button" 
-                        style="background-color: #4f46e5; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer;"
-                        onclick="navigator.clipboard.writeText(document.getElementById('visa_link_{id}').value).then(function(){{alert('✅ Copied!');}});">
+                <button type="button" class="button"
+                        style="background-color: #4f46e5; color: white;
+                               padding: 5px 10px; border-radius: 4px; cursor: pointer;"
+                        onclick="navigator.clipboard.writeText(
+                            document.getElementById('visa_link_{id}').value
+                        ).then(function(){{alert('✅ Copied!');}});">
                     📋 Copy
                 </button>
-                <a href="{url}" target="_blank" class="button" style="margin-left:5px; text-decoration:none;">
+                <a href="{url}" target="_blank" class="button"
+                   style="margin-left:5px; text-decoration:none;">
                     Open ↗
                 </a>
             </div>
@@ -469,9 +654,18 @@ class BookingAdmin(ModelAdmin):
                         "to": booking.client.phone,
                         "body": msg,
                     }
-                    requests.post(config.api_url, data=payload)
-                    count += 1
+                    response = requests.post(config.api_url, data=payload, timeout=30)
+                    if response.status_code == 200:
+                        count += 1
+                    else:
+                        logger.warning(
+                            f"WhatsApp API error for {booking.client.name}: "
+                            f"{response.status_code} - {response.text}"
+                        )
                 except Exception as e:
+                    logger.exception(
+                        f"Failed to send WhatsApp to {booking.client.name}"
+                    )
                     self.message_user(
                         request,
                         f"⚠️ Failed to send to {booking.client.name}: {e}",
@@ -567,8 +761,8 @@ class BookingAdmin(ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         """
         Dynamic Read-Only Logic:
-        If the booking is CANCELLED, make ALL fields read-only (Grayed out).
-        Otherwise, use the standard read-only fields.
+        - If the booking is CANCELLED, make ALL fields read-only.
+        - Only superusers can change the agent (created_by) field.
         """
         # 1. Get standard read-only fields defined in the class
         standard_readonly = list(super().get_readonly_fields(request, obj))
@@ -585,11 +779,47 @@ class BookingAdmin(ModelAdmin):
                 "status_badge",
                 "supplier_payment_status",
                 "visa_link_copy",
+                "documents_link",
             ]
             return all_fields + custom_fields
 
-        # 3. If not cancelled, return normal list
         return standard_readonly
+
+    def documents_link(self, obj):
+        if not obj.pk:
+            return "-"
+
+        url = reverse("tools_hub")
+        url = f"{url}?booking_id={obj.pk}"
+        return format_html(
+            '<a href="{}" class="button" target="_blank">🧰 Tools / Documents</a>',
+            url,
+        )
+
+    documents_link.short_description = "Tools / Documents"
+
+
+# --- MY ASSIGNED BOOKINGS (Special View) ---
+@admin.register(MyAssignedBooking)
+class MyAssignedBookingAdmin(BookingAdmin):
+    """
+    Same as BookingAdmin but filtered to show only bookings assigned to current user.
+    Inherits all display, inlines, fieldsets, and actions from BookingAdmin.
+    """
+
+    def get_queryset(self, request):
+        """Show only bookings assigned to the current user."""
+        qs = super().get_queryset(request)
+        return qs.filter(assigned_to=request.user)
+
+    def has_add_permission(self, request):
+        """Disable add - use main Bookings to create new bookings."""
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["title"] = "📋 My Assigned Bookings"
+        return super().changelist_view(request, extra_context=extra_context)
 
 
 # --- 4. OTHER ADMINS ---
@@ -601,14 +831,32 @@ class PaymentAuditAdmin(ModelAdmin):
     list_filter = ("method", "date")
     search_fields = ("booking__ref", "reference")
 
+    def has_module_permission(self, request):
+        """Only managers can access Payment module."""
+        return super().has_module_permission(request) and can_manage_financials(
+            request.user
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and can_manage_financials(
+            request.user
+        )
+
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
-        # If it's cancelled, you can LOOK (view), but you cannot CHANGE (save).
-        if obj and obj.status == "cancelled":
+        if not can_manage_financials(request.user):
+            return False
+        # If the booking is cancelled, you can LOOK (view), but you cannot CHANGE (save).
+        if obj and obj.booking and obj.booking.status == "cancelled":
             return False
         return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and can_manage_financials(
+            request.user
+        )
 
 
 @admin.action(description="💰 Pay Expenses via Ledger")
@@ -669,6 +917,32 @@ class ExpenseAdmin(ModelAdmin):
     list_filter = ("paid", "due_date")
 
     actions = [pay_expenses_via_ledger]
+
+    def has_module_permission(self, request):
+        """Only managers can access Expense module."""
+        return super().has_module_permission(request) and can_manage_financials(
+            request.user
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and can_manage_financials(
+            request.user
+        )
+
+    def has_add_permission(self, request):
+        return super().has_add_permission(request) and can_manage_financials(
+            request.user
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and can_manage_financials(
+            request.user
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        return super().has_delete_permission(request, obj) and can_manage_financials(
+            request.user
+        )
 
 
 @admin.action(description="📈 Consolidate as Revenue (Close Day)")
@@ -885,6 +1159,27 @@ class LedgerEntryAdmin(ModelAdmin):
 
         return response
 
+    def has_module_permission(self, request):
+        """Only managers can access Ledger module."""
+        return super().has_module_permission(request) and can_manage_financials(
+            request.user
+        )
+
+    def has_view_permission(self, request, obj=None):
+        return super().has_view_permission(request, obj) and can_manage_financials(
+            request.user
+        )
+
+    def has_add_permission(self, request):
+        return super().has_add_permission(request) and can_manage_financials(
+            request.user
+        )
+
+    def has_change_permission(self, request, obj=None):
+        return super().has_change_permission(request, obj) and can_manage_financials(
+            request.user
+        )
+
     def has_delete_permission(self, request, obj=None):
         return False
 
@@ -902,7 +1197,7 @@ class AnnouncementAdmin(ModelAdmin):
 
     def approval_progress(self, obj):
         count = obj.acknowledged_by.count()
-        total_staff = User.objects.filter(is_active=True).count() or 1
+        total_staff = get_user().objects.filter(is_active=True).count() or 1
         percent = int((count / total_staff) * 100)
         color = "green" if percent == 100 else "orange"
         return format_html(
@@ -925,6 +1220,11 @@ class KnowledgeBaseAdmin(ModelAdmin):
     list_display = ("title", "category", "utility_score")
 
 
+@admin.register(EditorSettings)
+class EditorSettingsAdmin(ModelAdmin):
+    list_display = ("name", "tinymce_api_key")
+
+
 @admin.register(AmadeusSettings)
 class AmadeusSettingsAdmin(ModelAdmin):
     list_display = ("name", "environment", "client_id")
@@ -943,3 +1243,31 @@ class VisaApplicationAdmin(ModelAdmin):
         return "-"
 
     booking_link.short_description = "Related Booking"
+
+
+@admin.register(DocumentTemplate)
+class DocumentTemplateAdmin(ModelAdmin):
+    list_display = ("name", "slug", "parser_type", "open_tool_button")
+
+    def open_tool_button(self, obj):  # pragma: no cover - admin UI
+        url = reverse("document_tool", args=[obj.slug])
+        return format_html(
+            '<a href="{}" class="button" style="background:#2563eb; color:white;">🚀 Launch Tool</a>',
+            url,
+        )
+
+    open_tool_button.short_description = "Generate"
+
+
+@admin.register(GeneratedDocument)
+class GeneratedDocumentAdmin(ModelAdmin):
+    list_display = ("__str__", "template", "created_at", "print_button")
+    list_filter = ("template",)
+
+    def print_button(self, obj):  # pragma: no cover - admin UI
+        return format_html(
+            '<a href="{}" target="_blank" class="button">🖨️ Print</a>',
+            obj.get_print_url(),
+        )
+
+    print_button.short_description = "Print"
