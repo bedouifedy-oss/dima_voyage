@@ -271,6 +271,19 @@ UNFOLD = {
     },
 }
 
+# --- CSRF CONFIGURATION FOR VPS ---
+CSRF_TRUSTED_ORIGINS = [
+    "https://dimavoyages.tn",
+    "https://www.dimavoyages.tn",
+    "http://dimavoyages.tn",
+    "http://www.dimavoyages.tn",
+]
+
+# Allow same-site requests
+CSRF_COOKIE_SECURE = False  # Set to True when using HTTPS only
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+
 # --- SECURITY HARDENING ---
 if not DEBUG:
     SECURE_SSL_REDIRECT = False
