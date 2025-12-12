@@ -213,6 +213,9 @@ UNFOLD = {
                         "title": "📊 Financial Dashboard",
                         "icon": "analytics",  # Uses Google Material Symbols
                         "link": reverse_lazy("financial_dashboard"),
+                        "permission": lambda request: request.user.has_perm(
+                            "core.view_ledgerentry"
+                        ),
                     },
                     # -------------------------------
                     {

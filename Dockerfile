@@ -27,5 +27,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 5. Copy project code
 COPY . /code/
 
-# 6. Default command
+# 6. Collect static files
+RUN python manage.py collectstatic --noinput
+
+# 7. Default command
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
