@@ -2,17 +2,21 @@
 Django settings for dima_voyage project.
 """
 
-import os
 from pathlib import Path
+import os
 
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'your-secret-key-here'
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = 'django-insecure-your-secret-key-here'
 
+# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -52,6 +56,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -59,6 +64,7 @@ DATABASES = {
     }
 }
 
+# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -74,6 +80,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Internationalization
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -82,18 +89,35 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Date Format Settings - DD-MM-YYYY
+DATE_FORMAT = 'dd-mm-yyyy'
+DATE_INPUT_FORMATS = [
+    '%d-%m-%Y',        # DD-MM-YYYY
+    '%d/%m/%Y',        # DD/MM/YYYY
+    '%d.%m.%Y',        # DD.MM.YYYY
+    '%Y-%m-%d',        # YYYY-MM-DD (ISO)
+]
+
+DATETIME_FORMAT = 'dd-mm-yyyy H:i:s'
+DATETIME_INPUT_FORMATS = [
+    '%d-%m-%Y %H:%M:%S',  # DD-MM-YYYY HH:MM:SS
+    '%d/%m/%Y %H:%M:%S',  # DD/MM/YYYY HH:MM:SS
+    '%Y-%m-%d %H:%M:%S',  # YYYY-MM-DD HH:MM:SS (ISO)
+]
+
+SHORT_DATE_FORMAT = 'dd-mm-yyyy'
+SHORT_DATETIME_FORMAT = 'dd-mm-yyyy H:i'
+
+# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATICFILES_DIRS = [
+    BASE_DIR / 'static',
+]
 
+# Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Date and Time Format Settings
-DATE_FORMAT = 'DD-MM-YYYY'
-DATE_INPUT_FORMATS = [
-    'DD-MM-YYYY',
-    '%d-%m-%Y',
-]
